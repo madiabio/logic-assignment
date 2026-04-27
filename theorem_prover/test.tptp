@@ -1,0 +1,14 @@
+% simple atomic formula
+fof(test, axiom, p)
+
+% simple propositional formula
+fof(propositional,axiom,
+    ( ( p0
+      & ~ q0 )
+   => ( r0
+      | ~ s0 ) ) ).
+
+% simple first-order formula
+fof(first_order,axiom,
+    ! [X] :
+      ( p(X) => q(X) ) ).
