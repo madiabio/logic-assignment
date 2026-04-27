@@ -28,14 +28,14 @@ fof_quantified_formula = { fof_quantifier ~ "[" ~ fof_variable_list ~ "]" ~ ":" 
 fof_quantifier = { "!" | "?" }
 fof_variable_list = { variable ~ ("," ~ variable)* }
 
-fof_atomic_formula = { fof_defined_infix_formula | fof_plain_atomic_formula | fof_defined_atomic_formula | fof_system_atomic_formula }
+fof_atomic_formula = { fof_defined_infix_formula | fof_plain_atomic_formula | fof_system_atomic_formula | fof_defined_atomic_formula }
 fof_plain_atomic_formula = { fof_plain_term }
 fof_defined_atomic_formula = { fof_defined_plain_term }
 fof_defined_infix_formula = { fof_term ~ defined_infix_pred ~ fof_term }
 fof_system_atomic_formula = { fof_system_term }
 
 fof_term = { fof_function_term | variable }
-fof_function_term = { fof_plain_term | fof_defined_term | fof_system_term }
+fof_function_term = { fof_plain_term | fof_system_term | fof_defined_term }
 fof_arguments = { fof_term ~ ("," ~ fof_term)* }
 
 fof_plain_term = { functor ~ "(" ~ fof_arguments ~ ")" | constant }

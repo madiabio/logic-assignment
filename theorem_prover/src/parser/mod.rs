@@ -1,5 +1,6 @@
 mod ast_builder;
 
+use crate::ast::Formula;
 use pest::Parser;
 use pest::iterators::{Pair, Pairs};
 use pest_derive::Parser;
@@ -12,7 +13,7 @@ struct TptpParser;
 pub struct FormulaRecord {
     pub name: String,
     pub role: String,
-    pub formula: String,
+    pub formula: Formula,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -65,12 +66,8 @@ fn parse_formula_record(pair: Pair<'_, Rule>) -> FormulaRecord {
     let mut inner = fof.into_inner();
     let name = inner.next().expect("fof name").as_str().to_owned();
     let role = inner.next().expect("fof role").as_str().to_owned();
-    let formula = inner
-        .next()
-        .expect("fof formula")
-        .as_str()
-        .trim()
-        .to_owned();
+    let formula_pair = inner.next().expect("fof formula");
+    let formula = ast_builder::build_formula(formula_pair);
 
     FormulaRecord {
         name,
