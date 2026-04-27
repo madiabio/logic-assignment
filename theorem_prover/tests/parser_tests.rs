@@ -193,16 +193,25 @@ fn flattens_or_chain_into_single_vector() {
 }
 
 #[test]
-fn folds_mixed_assoc_chains_left_to_right() {
+fn parses_mixed_binary_connectives_with_tptp_left_association() {
     let parsed = parse_problem("fof(mix,axiom,(p & q | r & s)).").expect("formula should parse");
 
     match first_premise_formula(&parsed) {
         Formula::And(items) => {
             assert_eq!(items.len(), 2);
-            assert!(matches!(items[0], Formula::Or(_)));
+            match &items[0] {
+                Formula::Or(or_items) => {
+                    assert_eq!(or_items.len(), 2);
+                    assert!(matches!(or_items[0], Formula::And(_)));
+                    assert!(matches!(or_items[1], Formula::Atom(_)));
+                }
+                other => panic!("expected left child to be Or(vec), got {other:?}"),
+            }
             assert!(matches!(items[1], Formula::Atom(_)));
         }
-        other => panic!("expected deterministic left-fold shape to be And, got {other:?}"),
+        other => panic!(
+            "expected TPTP left-associated shape ((p & q) | r) & s, got {other:?}"
+        ),
     }
 }
 
