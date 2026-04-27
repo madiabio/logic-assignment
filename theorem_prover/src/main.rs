@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use theorem_prover::parse_tptp;
+use theorem_prover::{Sequent, parse_problem};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -16,7 +16,7 @@ fn main() {
     if target.is_dir() {
         parse_directory(target);
     } else {
-        let result = parse_file(target);
+        let result = build_initial_sequent(target);
         report_single_file(target, result);
     }
 }
@@ -36,7 +36,7 @@ fn parse_directory(dir: &Path) {
         }
 
         parsed += 1;
-        if !parse_file(&path) {
+        if !build_initial_sequent(&path) {
             failures += 1;
             failed_files.push(path);
         }
@@ -58,11 +58,18 @@ fn parse_directory(dir: &Path) {
     }
 }
 
-fn parse_file(path: &Path) -> bool {
+fn build_initial_sequent(path: &Path) -> bool {
     let input = fs::read_to_string(path).expect("Failed to read input file");
 
-    match parse_tptp(&input) {
-        Ok(_) => true,
+    match parse_problem(&input) {
+        Ok(parsed) => match Sequent::from_parsed_problem(parsed) {
+            Ok(_) => true,
+            Err(err) => {
+                eprintln!("{}: sequent construction failed", path.display());
+                eprintln!("{err:?}");
+                false
+            }
+        },
         Err(e) => {
             eprintln!("{}: parse failed", path.display());
             eprintln!("{e}");
@@ -73,7 +80,7 @@ fn parse_file(path: &Path) -> bool {
 
 fn report_single_file(path: &Path, success: bool) {
     if success {
-        println!("{}: parse successful", path.display());
+        println!("{}: initial sequent built successfully", path.display());
     } else {
         std::process::exit(1);
     }
