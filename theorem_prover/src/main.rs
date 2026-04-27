@@ -15,8 +15,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    let input = fs::read_to_string(&args[1])
-        .expect("Failed to read input file");
+    let input = fs::read_to_string(&args[1]).expect("Failed to read input file");
 
     match TptpParser::parse(Rule::file, &input) {
         Ok(pairs) => {
