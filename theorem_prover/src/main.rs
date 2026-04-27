@@ -1,31 +1,80 @@
-use pest::Parser;
-use pest_derive::Parser;
 use std::env;
 use std::fs;
-
-#[derive(Parser)]
-#[grammar = "tptp.pest"]
-struct TptpParser;
+use std::path::Path;
+use theorem_prover::parse_tptp;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 2 {
-        eprintln!("Usage: cargo run -- <file.tptp>");
+        eprintln!("Usage: cargo run -- <file.tptp | directory>");
         std::process::exit(1);
     }
 
-    let input = fs::read_to_string(&args[1]).expect("Failed to read input file");
+    let target = Path::new(&args[1]);
 
-    match TptpParser::parse(Rule::file, &input) {
-        Ok(pairs) => {
-            println!("Parse successful!");
-            println!("{:#?}", pairs);
+    if target.is_dir() {
+        parse_directory(target);
+    } else {
+        let result = parse_file(target);
+        report_single_file(target, result);
+    }
+}
+
+fn parse_directory(dir: &Path) {
+    let mut failures = 0usize;
+    let mut parsed = 0usize;
+    let mut failed_files = Vec::new();
+
+    let entries = fs::read_dir(dir).expect("Failed to read directory");
+    for entry in entries {
+        let entry = entry.expect("Failed to read directory entry");
+        let path = entry.path();
+
+        if path.extension().and_then(|ext| ext.to_str()) != Some("p") {
+            continue;
         }
+
+        parsed += 1;
+        if !parse_file(&path) {
+            failures += 1;
+            failed_files.push(path);
+        }
+    }
+
+    println!("Parsed {parsed} file(s)");
+    println!("Succeeded: {}", parsed - failures);
+    println!("Failed: {failures}");
+
+    if !failed_files.is_empty() {
+        eprintln!("Failed files:");
+        for path in failed_files {
+            eprintln!("  {}", path.display());
+        }
+    }
+
+    if failures > 0 {
+        std::process::exit(1);
+    }
+}
+
+fn parse_file(path: &Path) -> bool {
+    let input = fs::read_to_string(path).expect("Failed to read input file");
+
+    match parse_tptp(&input) {
+        Ok(_) => true,
         Err(e) => {
-            eprintln!("Parse failed:");
+            eprintln!("{}: parse failed", path.display());
             eprintln!("{e}");
-            std::process::exit(1);
+            false
         }
+    }
+}
+
+fn report_single_file(path: &Path, success: bool) {
+    if success {
+        println!("{}: parse successful", path.display());
+    } else {
+        std::process::exit(1);
     }
 }
