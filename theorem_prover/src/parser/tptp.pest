@@ -1,0 +1,100 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE | LINE_COMMENT | BLOCK_COMMENT }
+NEWLINE = _{ "\r\n" | "\n" | "\r" }
+LINE_COMMENT = _{ "%" ~ (!NEWLINE ~ ANY)* }
+BLOCK_COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+
+file = { SOI ~ tptp_input* ~ EOI }
+tptp_input = { annotated_formula | include_directive }
+
+annotated_formula = { fof_annotated }
+fof_annotated = { "fof" ~ "(" ~ name ~ "," ~ formula_role ~ "," ~ fof_formula ~ ")" ~ "." }
+include_directive = { "include" ~ "(" ~ single_quoted ~ ")" ~ "." }
+
+formula_role = { lower_word }
+
+fof_formula = { fof_unit_formula ~ (binary_connective ~ fof_unit_formula)* }
+fof_binary_formula = { fof_unit_formula ~ binary_connective ~ fof_unit_formula ~ (binary_connective ~ fof_unit_formula)* }
+binary_connective = _{ assoc_connective | nonassoc_connective }
+assoc_connective = { "|" | "&" }
+nonassoc_connective = @{ "<=>" | "=>" | "<=" | "<~>" }
+
+fof_unit_formula = { fof_unary_formula | fof_unitary_formula }
+fof_unary_formula = { unary_connective ~ fof_unit_formula | fof_infix_unary }
+unary_connective = { "~" }
+fof_infix_unary = { fof_term ~ infix_inequality ~ fof_term }
+
+fof_unitary_formula = { fof_quantified_formula | fof_atomic_formula | "(" ~ fof_formula ~ ")" }
+fof_quantified_formula = { fof_quantifier ~ "[" ~ fof_variable_list ~ "]" ~ ":" ~ fof_unit_formula }
+fof_quantifier = { "!" | "?" }
+fof_variable_list = { variable ~ ("," ~ variable)* }
+
+fof_atomic_formula = { fof_defined_infix_formula | fof_plain_atomic_formula | fof_system_atomic_formula | fof_defined_atomic_formula }
+fof_plain_atomic_formula = { fof_plain_term }
+fof_defined_atomic_formula = { fof_defined_plain_term }
+fof_defined_infix_formula = { fof_term ~ defined_infix_pred ~ fof_term }
+fof_system_atomic_formula = { fof_system_term }
+
+fof_term = { fof_function_term | variable }
+fof_function_term = { fof_plain_term | fof_system_term | fof_defined_term }
+fof_arguments = { fof_term ~ ("," ~ fof_term)* }
+
+fof_plain_term = { functor ~ "(" ~ fof_arguments ~ ")" | constant }
+fof_defined_term = { number | distinct_object | fof_defined_atomic_term }
+fof_defined_atomic_term = { fof_defined_plain_term }
+fof_defined_plain_term = { defined_functor ~ "(" ~ fof_arguments ~ ")" | defined_constant }
+fof_system_term = { system_functor ~ "(" ~ fof_arguments ~ ")" | system_constant }
+
+defined_infix_pred = { "=" }
+infix_inequality = { "!=" }
+
+constant = { functor }
+functor = { atomic_word }
+defined_constant = { defined_functor }
+defined_functor = { atomic_defined_word }
+system_constant = { system_functor }
+system_functor = { atomic_system_word }
+variable = { upper_word }
+
+name = { atomic_word | integer }
+atomic_word = { lower_word | single_quoted | back_quoted }
+atomic_defined_word = { dollar_word }
+atomic_system_word = { dollar_dollar_word }
+number = { real | rational | integer }
+single_quoted = @{ single_quote ~ sq_char* ~ single_quote }
+back_quoted = @{ back_quote ~ upper_word }
+distinct_object = @{ "\"" ~ do_char* ~ "\"" }
+dollar_word = @{ dollar ~ (ASCII_ALPHANUMERIC | "_")* }
+dollar_dollar_word = @{ dollar ~ dollar ~ (ASCII_ALPHANUMERIC | "_")* }
+upper_word = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
+lower_word = @{ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
+
+real = { signed_real | unsigned_real }
+signed_real = { sign ~ unsigned_real }
+unsigned_real = { decimal_fraction | decimal_exponent }
+decimal_exponent = @{ (integer_digits | decimal_fraction) ~ exponent ~ exp_integer }
+decimal_fraction = { unsigned_integer ~ dot ~ integer_digits }
+exp_integer = { signed_exp_integer | integer_digits }
+signed_exp_integer = { sign ~ integer_digits }
+
+rational = { signed_rational | unsigned_rational }
+signed_rational = { sign ~ unsigned_rational }
+unsigned_rational = { unsigned_integer ~ slash ~ positive_integer }
+
+integer = @{ signed_integer | unsigned_integer }
+signed_integer = { sign ~ unsigned_integer }
+unsigned_integer = { zero_numeric | positive_integer }
+positive_integer = @{ non_zero_numeric ~ numeric* }
+integer_digits = @{ numeric+ }
+
+do_char = { (' '..'!' | '#'..'[' | ']'..'~') | ("\\" ~ ("\"" | "\\")) }
+single_quote = { "'" }
+back_quote = { "`" }
+sq_char = { (' '..'&' | '('..'[' | ']'..'~') | ("\\" ~ ("'" | "\\")) }
+sign = { "+" | "-" }
+dot = { "." }
+exponent = { "E" | "e" }
+slash = { "/" }
+non_zero_numeric = { '1'..'9' }
+numeric = { ASCII_DIGIT }
+zero_numeric = { "0" }
+dollar = { "$" }
