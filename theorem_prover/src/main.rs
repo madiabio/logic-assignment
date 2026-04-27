@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use theorem_prover::{Sequent, parse_problem};
+use theorem_prover::{ProblemPipelineError, run_problem};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -14,16 +14,16 @@ fn main() {
     let target = Path::new(&args[1]);
 
     if target.is_dir() {
-        parse_directory(target);
+        prove_directory(target);
     } else {
-        let result = build_initial_sequent(target);
+        let result = prove_file(target);
         report_single_file(target, result);
     }
 }
 
-fn parse_directory(dir: &Path) {
+fn prove_directory(dir: &Path) {
     let mut failures = 0usize;
-    let mut parsed = 0usize;
+    let mut processed = 0usize;
     let mut failed_files = Vec::new();
 
     let entries = fs::read_dir(dir).expect("Failed to read directory");
@@ -35,15 +35,15 @@ fn parse_directory(dir: &Path) {
             continue;
         }
 
-        parsed += 1;
-        if !build_initial_sequent(&path) {
+        processed += 1;
+        if !prove_file(&path) {
             failures += 1;
             failed_files.push(path);
         }
     }
 
-    println!("Parsed {parsed} file(s)");
-    println!("Succeeded: {}", parsed - failures);
+    println!("Processed {processed} file(s)");
+    println!("Succeeded: {}", processed - failures);
     println!("Failed: {failures}");
 
     if !failed_files.is_empty() {
@@ -58,21 +58,22 @@ fn parse_directory(dir: &Path) {
     }
 }
 
-fn build_initial_sequent(path: &Path) -> bool {
+fn prove_file(path: &Path) -> bool {
     let input = fs::read_to_string(path).expect("Failed to read input file");
 
-    match parse_problem(&input) {
-        Ok(parsed) => match Sequent::from_parsed_problem(parsed) {
-            Ok(_) => true,
-            Err(err) => {
-                eprintln!("{}: sequent construction failed", path.display());
-                eprintln!("{err:?}");
-                false
-            }
-        },
-        Err(e) => {
+    match run_problem(&input) {
+        Ok(result) => {
+            println!("{}: prover returned {:?}", path.display(), result.status);
+            true
+        }
+        Err(ProblemPipelineError::Parse(err)) => {
             eprintln!("{}: parse failed", path.display());
-            eprintln!("{e}");
+            eprintln!("{err}");
+            false
+        }
+        Err(ProblemPipelineError::SequentBuild(err)) => {
+            eprintln!("{}: sequent construction failed", path.display());
+            eprintln!("{err:?}");
             false
         }
     }
@@ -80,7 +81,7 @@ fn build_initial_sequent(path: &Path) -> bool {
 
 fn report_single_file(path: &Path, success: bool) {
     if success {
-        println!("{}: initial sequent built successfully", path.display());
+        println!("{}: pipeline completed", path.display());
     } else {
         std::process::exit(1);
     }
