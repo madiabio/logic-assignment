@@ -1,1 +1,0 @@
-C:\Users\madel\source\repos\logic-assignment\theorem_prover\target\debug\theorem_prover.exe: C:\Users\madel\source\repos\logic-assignment\theorem_prover\src\main.rs C:\Users\madel\source\repos\logic-assignment\theorem_prover\src\tptp.pest
