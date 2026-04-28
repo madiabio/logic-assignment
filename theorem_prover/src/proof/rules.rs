@@ -14,6 +14,10 @@ pub enum Rule {
     ImpliesR,
     NotL,
     NotR,
+    ForAllL,
+    ForAllR,
+    ExistsL,
+    ExistsR,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,6 +79,8 @@ fn left_rule(formula: &Formula) -> Option<Rule> {
         Formula::Or(_) => Some(Rule::OrL),
         Formula::Implies(_, _) => Some(Rule::ImpliesL),
         Formula::Not(_) => Some(Rule::NotL),
+        Formula::ForAll(_, _) => Some(Rule::ForAllL),
+        Formula::Exists(_, _) => Some(Rule::ExistsL),
         _ => None,
     }
 }
@@ -86,6 +92,8 @@ fn right_rule(formula: &Formula) -> Option<Rule> {
         Formula::Or(_) => Some(Rule::OrR),
         Formula::Implies(_, _) => Some(Rule::ImpliesR),
         Formula::Not(_) => Some(Rule::NotR),
+        Formula::ForAll(_, _) => Some(Rule::ForAllR),
+        Formula::Exists(_, _) => Some(Rule::ExistsR),
         _ => None,
     }
 }
