@@ -9,7 +9,6 @@ pub enum Formula {
     And(Vec<Formula>),
     Or(Vec<Formula>),
     Implies(Box<Formula>, Box<Formula>),
-    Iff(Box<Formula>, Box<Formula>),
     ForAll(Vec<Var>, Box<Formula>),
     Exists(Vec<Var>, Box<Formula>),
 }
@@ -17,8 +16,6 @@ pub enum Formula {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Atom {
     Predicate { name: Symbol, args: Vec<Term> },
-    Equality(Term, Term),
-    Inequality(Term, Term),
 }
 
 use crate::ast::term::{Symbol, Term, Var};
@@ -28,7 +25,7 @@ impl Formula {
         match self {
             Formula::True | Formula::False | Formula::Atom(_) => 3,
             Formula::ForAll(_, _) | Formula::Exists(_, _) | Formula::Not(_) => 2,
-            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _) | Formula::Iff(_, _) => 1,
+            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _) => 1,
         }
     }
 
@@ -86,11 +83,6 @@ impl Formula {
                 f.write_str(" ⇒ ")?;
                 right.fmt_with_parent(f, Some(my_precedence), right.is_binary())?;
             }
-            Formula::Iff(left, right) => {
-                left.fmt_with_parent(f, Some(my_precedence), false)?;
-                f.write_str(" ⇔ ")?;
-                right.fmt_with_parent(f, Some(my_precedence), right.is_binary())?;
-            }
             Formula::ForAll(vars, body) => {
                 f.write_str("∀")?;
                 for (index, var) in vars.iter().enumerate() {
@@ -125,7 +117,7 @@ impl Formula {
     fn is_binary(&self) -> bool {
         matches!(
             self,
-            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _) | Formula::Iff(_, _)
+            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _)
         )
     }
 }
@@ -147,8 +139,6 @@ impl fmt::Display for Atom {
                 }
                 Ok(())
             }
-            Atom::Equality(left, right) => write!(f, "{left} = {right}"),
-            Atom::Inequality(left, right) => write!(f, "{left} != {right}"),
         }
     }
 }

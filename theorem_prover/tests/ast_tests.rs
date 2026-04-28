@@ -85,7 +85,7 @@ fn terms_display_all_variants() {
 }
 
 #[test]
-fn atoms_display_predicates_and_equalities() {
+fn atoms_display_predicates() {
     assert_eq!(format!("{}", predicate("p")), "p");
     assert_eq!(
         format!(
@@ -93,14 +93,6 @@ fn atoms_display_predicates_and_equalities() {
             predicate_with_args("p", vec![variable("X"), constant("a")])
         ),
         "p(X, a)"
-    );
-    assert_eq!(
-        format!("{}", Atom::Equality(constant("a"), constant("b"))),
-        "a = b"
-    );
-    assert_eq!(
-        format!("{}", Atom::Inequality(constant("a"), constant("b"))),
-        "a != b"
     );
 }
 
@@ -198,16 +190,6 @@ fn formulas_display_connectives_with_precedence() {
     assert_eq!(
         format!(
             "{}",
-            Formula::Iff(
-                Box::new(Formula::Not(Box::new(atom_formula("p")))),
-                Box::new(atom_formula("q"))
-            )
-        ),
-        "¬p ⇔ q"
-    );
-    assert_eq!(
-        format!(
-            "{}",
             Formula::ForAll(
                 vec![var("X")],
                 Box::new(Formula::Implies(
@@ -247,18 +229,5 @@ fn formulas_parenthesize_ambiguous_binary_nesting() {
             )
         ),
         "p ⇒ q ⇒ r"
-    );
-    assert_eq!(
-        format!(
-            "{}",
-            Formula::Iff(
-                Box::new(atom_formula("p")),
-                Box::new(Formula::Iff(
-                    Box::new(atom_formula("q")),
-                    Box::new(atom_formula("r"))
-                ))
-            )
-        ),
-        "p ⇔ (q ⇔ r)"
     );
 }
