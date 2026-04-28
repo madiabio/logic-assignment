@@ -1,4 +1,4 @@
-use theorem_prover::{ProofStatus, ProblemPipelineError, run_problem};
+use theorem_prover::{ProblemPipelineError, ProofStatus, run_problem};
 
 #[test]
 fn run_problem_feeds_built_sequent_to_the_prover() {

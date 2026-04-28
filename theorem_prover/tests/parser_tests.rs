@@ -168,7 +168,8 @@ fn lowers_exclusive_biconditional_to_negated_iff() {
 
 #[test]
 fn flattens_and_chain_into_single_vector() {
-    let parsed = parse_problem("fof(and_chain,axiom,(p & q & r & s)).").expect("formula should parse");
+    let parsed =
+        parse_problem("fof(and_chain,axiom,(p & q & r & s)).").expect("formula should parse");
 
     match first_premise_formula(&parsed) {
         Formula::And(items) => {
@@ -209,9 +210,7 @@ fn parses_mixed_binary_connectives_with_tptp_left_association() {
             }
             assert!(matches!(items[1], Formula::Atom(_)));
         }
-        other => panic!(
-            "expected TPTP left-associated shape ((p & q) | r) & s, got {other:?}"
-        ),
+        other => panic!("expected TPTP left-associated shape ((p & q) | r) & s, got {other:?}"),
     }
 }
 

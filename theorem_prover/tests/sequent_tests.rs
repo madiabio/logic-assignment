@@ -125,7 +125,10 @@ fn displays_nested_formulas_inside_sequents() {
         ),
     ]);
     let right = Formula::Implies(
-        Box::new(Formula::And(vec![predicate_formula("s"), predicate_formula("t")])),
+        Box::new(Formula::And(vec![
+            predicate_formula("s"),
+            predicate_formula("t"),
+        ])),
         Box::new(predicate_formula("u")),
     );
 

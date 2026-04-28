@@ -35,7 +35,10 @@ fn atom_formula(name: &str) -> Formula {
 #[test]
 fn symbols_display_as_stored() {
     assert_eq!(format!("{}", Symbol::User("p".to_owned())), "p");
-    assert_eq!(format!("{}", Symbol::Defined("$trueish".to_owned())), "$trueish");
+    assert_eq!(
+        format!("{}", Symbol::Defined("$trueish".to_owned())),
+        "$trueish"
+    );
     assert_eq!(format!("{}", Symbol::System("$$sys".to_owned())), "$$sys");
 }
 
@@ -85,7 +88,10 @@ fn terms_display_all_variants() {
 fn atoms_display_predicates_and_equalities() {
     assert_eq!(format!("{}", predicate("p")), "p");
     assert_eq!(
-        format!("{}", predicate_with_args("p", vec![variable("X"), constant("a")])),
+        format!(
+            "{}",
+            predicate_with_args("p", vec![variable("X"), constant("a")])
+        ),
         "p(X, a)"
     );
     assert_eq!(
@@ -110,7 +116,10 @@ fn formulas_display_atoms_constants_and_quantifiers() {
     assert_eq!(
         format!(
             "{}",
-            Formula::Not(Box::new(Formula::And(vec![atom_formula("p"), atom_formula("q")])))
+            Formula::Not(Box::new(Formula::And(vec![
+                atom_formula("p"),
+                atom_formula("q")
+            ])))
         ),
         "¬(p ∧ q)"
     );
@@ -144,12 +153,19 @@ fn formulas_display_connectives_with_precedence() {
     assert_eq!(
         format!(
             "{}",
-            Formula::And(vec![atom_formula("p"), atom_formula("q"), atom_formula("r")])
+            Formula::And(vec![
+                atom_formula("p"),
+                atom_formula("q"),
+                atom_formula("r")
+            ])
         ),
         "p ∧ q ∧ r"
     );
     assert_eq!(
-        format!("{}", Formula::Or(vec![atom_formula("p"), atom_formula("q")])),
+        format!(
+            "{}",
+            Formula::Or(vec![atom_formula("p"), atom_formula("q")])
+        ),
         "p ∨ q"
     );
     assert_eq!(
