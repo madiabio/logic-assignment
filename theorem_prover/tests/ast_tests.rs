@@ -1,168 +1,248 @@
 use theorem_prover::ast::{Atom, Formula, NumberLit, Symbol, Term, Var};
 
-#[test]
-fn term_variants_have_expected_shape() {
-    let var = Term::Var(Var {
-        name: "X".to_owned(),
-    });
-    assert!(matches!(var, Term::Var(Var { name }) if name == "X"));
+fn var(name: &str) -> Var {
+    Var {
+        name: name.to_owned(),
+    }
+}
 
-    let constant = Term::Const(Symbol::User("a".to_owned()));
-    assert!(matches!(constant, Term::Const(Symbol::User(name)) if name == "a"));
+fn variable(name: &str) -> Term {
+    Term::Var(var(name))
+}
 
-    let function = Term::Fun {
-        name: Symbol::Defined("$f".to_owned()),
-        args: vec![Term::Number(NumberLit::Integer("1".to_owned()))],
-    };
-    assert!(matches!(
-        function,
-        Term::Fun {
-            name: Symbol::Defined(name),
-            args
-        } if name == "$f" && args.len() == 1
-    ));
+fn constant(name: &str) -> Term {
+    Term::Const(Symbol::User(name.to_owned()))
+}
 
-    let integer = Term::Number(NumberLit::Integer("-7".to_owned()));
-    let rational = Term::Number(NumberLit::Rational("2/5".to_owned()));
-    let real = Term::Number(NumberLit::Real("3.14".to_owned()));
-    assert!(matches!(integer, Term::Number(NumberLit::Integer(value)) if value == "-7"));
-    assert!(matches!(rational, Term::Number(NumberLit::Rational(value)) if value == "2/5"));
-    assert!(matches!(real, Term::Number(NumberLit::Real(value)) if value == "3.14"));
+fn predicate(name: &str) -> Atom {
+    Atom::Predicate {
+        name: Symbol::User(name.to_owned()),
+        args: Vec::new(),
+    }
+}
 
-    let distinct = Term::DistinctObject("\"obj\"".to_owned());
-    assert!(matches!(distinct, Term::DistinctObject(value) if value == "\"obj\""));
+fn predicate_with_args(name: &str, args: Vec<Term>) -> Atom {
+    Atom::Predicate {
+        name: Symbol::User(name.to_owned()),
+        args,
+    }
+}
+
+fn atom_formula(name: &str) -> Formula {
+    Formula::Atom(predicate(name))
 }
 
 #[test]
-fn symbol_variants_are_classified() {
-    let user = Symbol::User("plain_name".to_owned());
-    let defined = Symbol::Defined("$defined".to_owned());
-    let system = Symbol::System("$$system".to_owned());
-
-    assert!(matches!(user, Symbol::User(value) if value == "plain_name"));
-    assert!(matches!(defined, Symbol::Defined(value) if value == "$defined"));
-    assert!(matches!(system, Symbol::System(value) if value == "$$system"));
+fn symbols_display_as_stored() {
+    assert_eq!(format!("{}", Symbol::User("p".to_owned())), "p");
+    assert_eq!(format!("{}", Symbol::Defined("$trueish".to_owned())), "$trueish");
+    assert_eq!(format!("{}", Symbol::System("$$sys".to_owned())), "$$sys");
 }
 
 #[test]
-fn atom_variants_capture_predicate_and_equalities() {
-    let predicate = Atom::Predicate {
-        name: Symbol::User("p".to_owned()),
-        args: vec![Term::Var(Var {
-            name: "X".to_owned(),
-        })],
-    };
-    assert!(matches!(
-        predicate,
-        Atom::Predicate {
-            name: Symbol::User(name),
-            args
-        } if name == "p" && args.len() == 1
-    ));
-
-    let equality = Atom::Equality(
-        Term::Const(Symbol::User("a".to_owned())),
-        Term::Const(Symbol::User("b".to_owned())),
+fn terms_display_all_variants() {
+    assert_eq!(format!("{}", variable("X")), "X");
+    assert_eq!(format!("{}", constant("a")), "a");
+    assert_eq!(
+        format!("{}", Term::Number(NumberLit::Integer("-7".to_owned()))),
+        "-7"
     );
-    let inequality = Atom::Inequality(
-        Term::Const(Symbol::User("a".to_owned())),
-        Term::Const(Symbol::User("b".to_owned())),
+    assert_eq!(
+        format!("{}", Term::Number(NumberLit::Rational("2/5".to_owned()))),
+        "2/5"
     );
-    assert!(matches!(equality, Atom::Equality(_, _)));
-    assert!(matches!(inequality, Atom::Inequality(_, _)));
+    assert_eq!(
+        format!("{}", Term::Number(NumberLit::Real("3.14".to_owned()))),
+        "3.14"
+    );
+    assert_eq!(
+        format!("{}", Term::DistinctObject("\"obj\"".to_owned())),
+        "\"obj\""
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Term::Fun {
+                name: Symbol::Defined("$f".to_owned()),
+                args: vec![variable("X"), constant("a")],
+            }
+        ),
+        "$f(X, a)"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Term::Fun {
+                name: Symbol::User("c".to_owned()),
+                args: Vec::new(),
+            }
+        ),
+        "c()"
+    );
 }
 
 #[test]
-fn formula_variants_cover_core_constructors() {
-    let truth = Formula::True;
-    let falsity = Formula::False;
-    assert!(matches!(truth, Formula::True));
-    assert!(matches!(falsity, Formula::False));
-
-    let atom = Formula::Atom(Atom::Predicate {
-        name: Symbol::User("p".to_owned()),
-        args: vec![],
-    });
-    assert!(matches!(atom, Formula::Atom(Atom::Predicate { .. })));
-
-    let not_formula = Formula::Not(Box::new(Formula::Atom(Atom::Predicate {
-        name: Symbol::User("q".to_owned()),
-        args: vec![],
-    })));
-    assert!(matches!(not_formula, Formula::Not(_)));
-
-    let implies = Formula::Implies(
-        Box::new(Formula::Atom(Atom::Predicate {
-            name: Symbol::User("p".to_owned()),
-            args: vec![],
-        })),
-        Box::new(Formula::Atom(Atom::Predicate {
-            name: Symbol::User("q".to_owned()),
-            args: vec![],
-        })),
+fn atoms_display_predicates_and_equalities() {
+    assert_eq!(format!("{}", predicate("p")), "p");
+    assert_eq!(
+        format!("{}", predicate_with_args("p", vec![variable("X"), constant("a")])),
+        "p(X, a)"
     );
-    let iff = Formula::Iff(
-        Box::new(Formula::Atom(Atom::Predicate {
-            name: Symbol::User("p".to_owned()),
-            args: vec![],
-        })),
-        Box::new(Formula::Atom(Atom::Predicate {
-            name: Symbol::User("q".to_owned()),
-            args: vec![],
-        })),
+    assert_eq!(
+        format!("{}", Atom::Equality(constant("a"), constant("b"))),
+        "a = b"
     );
-    assert!(matches!(implies, Formula::Implies(_, _)));
-    assert!(matches!(iff, Formula::Iff(_, _)));
+    assert_eq!(
+        format!("{}", Atom::Inequality(constant("a"), constant("b"))),
+        "a != b"
+    );
+}
 
-    let and_formula = Formula::And(vec![
-        Formula::Atom(Atom::Predicate {
-            name: Symbol::User("p".to_owned()),
-            args: vec![],
-        }),
-        Formula::Atom(Atom::Predicate {
-            name: Symbol::User("q".to_owned()),
-            args: vec![],
-        }),
-        Formula::Atom(Atom::Predicate {
-            name: Symbol::User("r".to_owned()),
-            args: vec![],
-        }),
-    ]);
-    let or_formula = Formula::Or(vec![
-        Formula::Atom(Atom::Predicate {
-            name: Symbol::User("p".to_owned()),
-            args: vec![],
-        }),
-        Formula::Atom(Atom::Predicate {
-            name: Symbol::User("q".to_owned()),
-            args: vec![],
-        }),
-    ]);
-    assert!(matches!(and_formula, Formula::And(items) if items.len() == 3));
-    assert!(matches!(or_formula, Formula::Or(items) if items.len() == 2));
+#[test]
+fn formulas_display_atoms_constants_and_quantifiers() {
+    assert_eq!(format!("{}", Formula::True), "⊤");
+    assert_eq!(format!("{}", Formula::False), "⊥");
+    assert_eq!(format!("{}", atom_formula("p")), "p");
+    assert_eq!(
+        format!("{}", Formula::Not(Box::new(atom_formula("p")))),
+        "¬p"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Not(Box::new(Formula::And(vec![atom_formula("p"), atom_formula("q")])))
+        ),
+        "¬(p ∧ q)"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::ForAll(
+                vec![var("X")],
+                Box::new(Formula::Atom(predicate_with_args("p", vec![variable("X")])))
+            )
+        ),
+        "∀X. p(X)"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Exists(
+                vec![var("X"), var("Y")],
+                Box::new(Formula::Atom(predicate_with_args(
+                    "q",
+                    vec![variable("X"), variable("Y")]
+                )))
+            )
+        ),
+        "∃X, Y. q(X, Y)"
+    );
+}
 
-    let for_all = Formula::ForAll(
-        vec![Var {
-            name: "X".to_owned(),
-        }],
-        Box::new(Formula::Atom(Atom::Predicate {
-            name: Symbol::User("p".to_owned()),
-            args: vec![Term::Var(Var {
-                name: "X".to_owned(),
-            })],
-        })),
+#[test]
+fn formulas_display_connectives_with_precedence() {
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::And(vec![atom_formula("p"), atom_formula("q"), atom_formula("r")])
+        ),
+        "p ∧ q ∧ r"
     );
-    let exists = Formula::Exists(
-        vec![Var {
-            name: "Y".to_owned(),
-        }],
-        Box::new(Formula::Atom(Atom::Predicate {
-            name: Symbol::User("q".to_owned()),
-            args: vec![Term::Var(Var {
-                name: "Y".to_owned(),
-            })],
-        })),
+    assert_eq!(
+        format!("{}", Formula::Or(vec![atom_formula("p"), atom_formula("q")])),
+        "p ∨ q"
     );
-    assert!(matches!(for_all, Formula::ForAll(vars, _) if vars.len() == 1));
-    assert!(matches!(exists, Formula::Exists(vars, _) if vars.len() == 1));
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Implies(Box::new(atom_formula("p")), Box::new(atom_formula("q")))
+        ),
+        "p ⇒ q"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Implies(
+                Box::new(Formula::And(vec![atom_formula("p"), atom_formula("q")])),
+                Box::new(atom_formula("r"))
+            )
+        ),
+        "p ∧ q ⇒ r"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::And(vec![
+                atom_formula("p"),
+                Formula::Implies(Box::new(atom_formula("q")), Box::new(atom_formula("r")))
+            ])
+        ),
+        "p ∧ (q ⇒ r)"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Iff(
+                Box::new(Formula::Not(Box::new(atom_formula("p")))),
+                Box::new(atom_formula("q"))
+            )
+        ),
+        "¬p ⇔ q"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::ForAll(
+                vec![var("X")],
+                Box::new(Formula::Implies(
+                    Box::new(Formula::Atom(predicate_with_args("p", vec![variable("X")]))),
+                    Box::new(atom_formula("q"))
+                ))
+            )
+        ),
+        "∀X. (p(X) ⇒ q)"
+    );
+}
+
+#[test]
+fn formulas_parenthesize_ambiguous_binary_nesting() {
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Implies(
+                Box::new(atom_formula("p")),
+                Box::new(Formula::Implies(
+                    Box::new(atom_formula("q")),
+                    Box::new(atom_formula("r"))
+                ))
+            )
+        ),
+        "p ⇒ (q ⇒ r)"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Implies(
+                Box::new(Formula::Implies(
+                    Box::new(atom_formula("p")),
+                    Box::new(atom_formula("q"))
+                )),
+                Box::new(atom_formula("r"))
+            )
+        ),
+        "p ⇒ q ⇒ r"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Formula::Iff(
+                Box::new(atom_formula("p")),
+                Box::new(Formula::Iff(
+                    Box::new(atom_formula("q")),
+                    Box::new(atom_formula("r"))
+                ))
+            )
+        ),
+        "p ⇔ (q ⇔ r)"
+    );
 }

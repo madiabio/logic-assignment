@@ -1,9 +1,11 @@
+use std::fmt;
+
 use crate::ast::Formula;
 use crate::parser::ParsedProblem;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sequent {
-    pub left: Vec<Formula>, // Gamma
+    pub left: Vec<Formula>,  // Gamma
     pub right: Vec<Formula>, // Delta
 }
 
@@ -26,5 +28,34 @@ impl Sequent {
             left,
             right: vec![conjecture.formula],
         })
+    }
+}
+
+impl fmt::Display for Sequent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, formula) in self.left.iter().enumerate() {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+            write!(f, "{formula}")?;
+        }
+
+        if !self.left.is_empty() {
+            f.write_str(" ")?;
+        }
+
+        f.write_str("⊢")?;
+
+        if !self.right.is_empty() {
+            f.write_str(" ")?;
+            for (index, formula) in self.right.iter().enumerate() {
+                if index > 0 {
+                    f.write_str(", ")?;
+                }
+                write!(f, "{formula}")?;
+            }
+        }
+
+        Ok(())
     }
 }
