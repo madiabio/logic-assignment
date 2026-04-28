@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
 use theorem_prover::{ProblemPipelineError, build_problem_sequent, run_problem};
 
@@ -78,10 +79,12 @@ fn prove_file(path: &Path) -> bool {
 
     match run_problem(&input) {
         Ok(result) => {
+            clear_parse_failure_marker(path);
             println!("{}: prover returned {:?}", path.display(), result.status);
             true
         }
         Err(ProblemPipelineError::Parse(err)) => {
+            write_parse_failure_marker(path, &err);
             eprintln!("{}: parse failed", path.display());
             eprintln!("{err}");
             false
@@ -136,6 +139,7 @@ fn inspect_rules_file(path: &Path) -> bool {
 
     match build_problem_sequent(&input) {
         Ok(sequent) => {
+            clear_parse_failure_marker(path);
             println!("{}:", path.display());
             println!("  {sequent}");
             let matches = find_applicable_rules(&sequent);
@@ -149,6 +153,7 @@ fn inspect_rules_file(path: &Path) -> bool {
             true
         }
         Err(ProblemPipelineError::Parse(err)) => {
+            write_parse_failure_marker(path, &err);
             eprintln!("{}: parse failed", path.display());
             eprintln!("{err}");
             false
@@ -173,5 +178,45 @@ fn report_single_file(path: &Path, success: bool) {
         println!("{}: pipeline completed", path.display());
     } else {
         std::process::exit(1);
+    }
+}
+
+fn parse_failure_marker_path(path: &Path) -> Option<PathBuf> {
+    (path.extension().and_then(|ext| ext.to_str()) == Some("p"))
+        .then(|| PathBuf::from(format!("{}.parse_failed", path.display())))
+}
+
+fn write_parse_failure_marker(path: &Path, err: &str) {
+    let Some(marker_path) = parse_failure_marker_path(path) else {
+        return;
+    };
+
+    let contents = format!("{}\nparse failed\n{err}\n", path.display());
+    if let Err(write_err) = fs::write(&marker_path, contents) {
+        eprintln!(
+            "{}: failed to write parse-failure marker {}",
+            path.display(),
+            marker_path.display()
+        );
+        eprintln!("{write_err}");
+    }
+}
+
+fn clear_parse_failure_marker(path: &Path) {
+    let Some(marker_path) = parse_failure_marker_path(path) else {
+        return;
+    };
+
+    match fs::remove_file(&marker_path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => {
+            eprintln!(
+                "{}: failed to remove parse-failure marker {}",
+                path.display(),
+                marker_path.display()
+            );
+            eprintln!("{err}");
+        }
     }
 }

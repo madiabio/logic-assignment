@@ -19,6 +19,10 @@ fn write_problem_file(dir: &Path, name: &str, contents: &str) -> PathBuf {
     path
 }
 
+fn parse_failed_marker_path(path: &Path) -> PathBuf {
+    PathBuf::from(format!("{}.parse_failed", path.display()))
+}
+
 #[test]
 fn rules_subcommand_prints_matching_rules_for_a_single_file() {
     let dir = make_temp_dir("rules_single");
@@ -150,5 +154,179 @@ fof(ax_1,axiom,p).
     assert!(
         stderr.contains("MissingConjecture"),
         "stderr was:\n{stderr}"
+    );
+}
+
+#[test]
+fn rules_subcommand_creates_parse_failed_marker_for_parse_errors() {
+    let dir = make_temp_dir("rules_parse_marker");
+    let input = write_problem_file(
+        &dir,
+        "bad_parse.p",
+        r#"
+fof(ax_1,axiom,p)
+"#,
+    );
+    let marker = parse_failed_marker_path(&input);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr was:\n{stderr}");
+    assert!(marker.exists(), "expected marker at {}", marker.display());
+
+    let marker_contents = fs::read_to_string(&marker).expect("marker should be readable");
+    assert!(
+        marker_contents.contains(&input.display().to_string()),
+        "marker contents were:\n{marker_contents}"
+    );
+    assert!(
+        marker_contents.contains("parse failed"),
+        "marker contents were:\n{marker_contents}"
+    );
+    assert!(
+        marker_contents.contains("expected "),
+        "marker contents were:\n{marker_contents}"
+    );
+}
+
+#[test]
+fn rules_subcommand_removes_stale_parse_failed_marker_after_successful_rerun() {
+    let dir = make_temp_dir("rules_parse_marker_cleanup");
+    let input = write_problem_file(
+        &dir,
+        "flaky_parse.p",
+        r#"
+fof(ax_1,axiom,p)
+"#,
+    );
+    let marker = parse_failed_marker_path(&input);
+
+    let first_run = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+    assert!(
+        !first_run.status.success(),
+        "stderr was:\n{}",
+        String::from_utf8_lossy(&first_run.stderr)
+    );
+    assert!(marker.exists(), "expected marker at {}", marker.display());
+
+    fs::write(
+        &input,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    )
+    .expect("problem file should be rewritten");
+
+    let second_run = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&second_run.stdout);
+    let stderr = String::from_utf8_lossy(&second_run.stderr);
+    assert!(
+        second_run.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        !marker.exists(),
+        "expected stale marker to be removed at {}",
+        marker.display()
+    );
+}
+
+#[test]
+fn rules_subcommand_does_not_create_parse_failed_marker_for_sequent_build_failures() {
+    let dir = make_temp_dir("rules_no_marker_for_sequent_failure");
+    let input = write_problem_file(
+        &dir,
+        "missing_conjecture_marker_check.p",
+        r#"
+fof(ax_1,axiom,p).
+"#,
+    );
+    let marker = parse_failed_marker_path(&input);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr was:\n{stderr}");
+    assert!(
+        !marker.exists(),
+        "did not expect marker for sequent-build failure at {}",
+        marker.display()
+    );
+}
+
+#[test]
+fn rules_subcommand_directory_creates_markers_only_for_parse_failing_p_files() {
+    let dir = make_temp_dir("rules_directory_markers");
+    let good = write_problem_file(
+        &dir,
+        "good.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+    let bad_parse = write_problem_file(
+        &dir,
+        "bad_parse.p",
+        r#"
+fof(ax_1,axiom,p)
+"#,
+    );
+    let sequent_failure = write_problem_file(
+        &dir,
+        "missing_conjecture.p",
+        r#"
+fof(ax_1,axiom,p).
+"#,
+    );
+    let ignored = write_problem_file(
+        &dir,
+        "ignored.tptp",
+        r#"
+fof(ax_1,axiom,p)
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["--rules", dir.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "expected failure summary\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        parse_failed_marker_path(&bad_parse).exists(),
+        "expected marker for parse failure"
+    );
+    assert!(
+        !parse_failed_marker_path(&good).exists(),
+        "did not expect marker for successful file"
+    );
+    assert!(
+        !parse_failed_marker_path(&sequent_failure).exists(),
+        "did not expect marker for sequent-build failure"
+    );
+    assert!(
+        !parse_failed_marker_path(&ignored).exists(),
+        "did not expect marker for ignored non-.p file"
     );
 }
