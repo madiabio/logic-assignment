@@ -330,3 +330,97 @@ fof(ax_1,axiom,p)
         "did not expect marker for ignored non-.p file"
     );
 }
+
+#[test]
+fn rules_subcommand_directory_skips_files_with_parse_failed_markers_by_default() {
+    let dir = make_temp_dir("rules_directory_skip_marker");
+    let skipped = write_problem_file(
+        &dir,
+        "skipped.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+    let processed = write_problem_file(
+        &dir,
+        "processed.p",
+        r#"
+fof(ax_1,axiom,q).
+fof(conj_1,conjecture,q).
+"#,
+    );
+    fs::write(parse_failed_marker_path(&skipped), "stale marker").expect("marker should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["--rules", dir.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(!stdout.contains("skipped.p:"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("processed.p:"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("Processed 1 file(s)"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("Skipped: 1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Succeeded: 1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Failed: 0"), "stdout was:\n{stdout}");
+    assert!(
+        parse_failed_marker_path(&skipped).exists(),
+        "expected skipped marker to remain"
+    );
+    assert!(
+        !parse_failed_marker_path(&processed).exists(),
+        "did not expect a marker for processed file"
+    );
+}
+
+#[test]
+fn rules_subcommand_directory_retry_flag_reprocesses_parse_failed_files() {
+    let dir = make_temp_dir("rules_directory_retry_marker");
+    let retried = write_problem_file(
+        &dir,
+        "retried.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+    let marker = parse_failed_marker_path(&retried);
+    fs::write(&marker, "stale marker").expect("marker should be written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args([
+            "--rules",
+            "--retry-parse-failed",
+            dir.to_str().expect("path should be utf-8"),
+        ])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(stdout.contains("retried.p:"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("Processed 1 file(s)"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("Skipped: 0"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Succeeded: 1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Failed: 0"), "stdout was:\n{stdout}");
+    assert!(
+        !marker.exists(),
+        "expected retry flag to clear stale marker after success"
+    );
+}

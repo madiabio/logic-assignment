@@ -5,41 +5,59 @@ use std::path::{Path, PathBuf};
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
 use theorem_prover::{ProblemPipelineError, build_problem_sequent, run_problem};
 
+#[derive(Clone, Copy)]
+struct RunOptions {
+    retry_parse_failed: bool,
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
     match args.as_slice() {
-        [_, target] => run_prover_mode(Path::new(target)),
-        [_, flag, target] if flag == "--rules" => run_rules_mode(Path::new(target)),
+        [_, target] => run_prover_mode(Path::new(target), RunOptions { retry_parse_failed: false }),
+        [_, flag, target] if flag == "--rules" => {
+            run_rules_mode(Path::new(target), RunOptions { retry_parse_failed: false })
+        }
+        [_, flag, target] if flag == "--retry-parse-failed" => {
+            run_prover_mode(Path::new(target), RunOptions { retry_parse_failed: true })
+        }
+        [_, flag1, flag2, target]
+            if flag1 == "--rules" && flag2 == "--retry-parse-failed" =>
+        {
+            run_rules_mode(Path::new(target), RunOptions { retry_parse_failed: true })
+        }
         _ => {
             eprintln!("Usage: cargo run -- <file.tptp | directory>");
+            eprintln!("   or: cargo run -- --retry-parse-failed <file.tptp | directory>");
             eprintln!("   or: cargo run -- --rules <file.p | directory>");
+            eprintln!("   or: cargo run -- --rules --retry-parse-failed <file.p | directory>");
             std::process::exit(1);
         }
     }
 }
 
-fn run_prover_mode(target: &Path) {
+fn run_prover_mode(target: &Path, options: RunOptions) {
     if target.is_dir() {
-        prove_directory(target);
+        prove_directory(target, options);
     } else {
         let result = prove_file(target);
         report_single_file(target, result);
     }
 }
 
-fn run_rules_mode(target: &Path) {
+fn run_rules_mode(target: &Path, options: RunOptions) {
     if target.is_dir() {
-        inspect_rules_directory(target);
+        inspect_rules_directory(target, options);
     } else {
         let result = inspect_rules_file(target);
         report_single_file(target, result);
     }
 }
 
-fn prove_directory(dir: &Path) {
+fn prove_directory(dir: &Path, options: RunOptions) {
     let mut failures = 0usize;
     let mut processed = 0usize;
+    let mut skipped = 0usize;
     let mut failed_files = Vec::new();
 
     let entries = fs::read_dir(dir).expect("Failed to read directory");
@@ -51,6 +69,11 @@ fn prove_directory(dir: &Path) {
             continue;
         }
 
+        if should_skip_parse_failed_file(&path, options) {
+            skipped += 1;
+            continue;
+        }
+
         processed += 1;
         if !prove_file(&path) {
             failures += 1;
@@ -59,6 +82,7 @@ fn prove_directory(dir: &Path) {
     }
 
     println!("Processed {processed} file(s)");
+    println!("Skipped: {skipped}");
     println!("Succeeded: {}", processed - failures);
     println!("Failed: {failures}");
 
@@ -97,9 +121,10 @@ fn prove_file(path: &Path) -> bool {
     }
 }
 
-fn inspect_rules_directory(dir: &Path) {
+fn inspect_rules_directory(dir: &Path, options: RunOptions) {
     let mut failures = 0usize;
     let mut processed = 0usize;
+    let mut skipped = 0usize;
     let mut failed_files = Vec::new();
 
     let entries = fs::read_dir(dir).expect("Failed to read directory");
@@ -111,6 +136,11 @@ fn inspect_rules_directory(dir: &Path) {
             continue;
         }
 
+        if should_skip_parse_failed_file(&path, options) {
+            skipped += 1;
+            continue;
+        }
+
         processed += 1;
         if !inspect_rules_file(&path) {
             failures += 1;
@@ -119,6 +149,7 @@ fn inspect_rules_directory(dir: &Path) {
     }
 
     println!("Processed {processed} file(s)");
+    println!("Skipped: {skipped}");
     println!("Succeeded: {}", processed - failures);
     println!("Failed: {failures}");
 
@@ -219,4 +250,10 @@ fn clear_parse_failure_marker(path: &Path) {
             eprintln!("{err}");
         }
     }
+}
+
+fn should_skip_parse_failed_file(path: &Path, options: RunOptions) -> bool {
+    !options.retry_parse_failed
+        && parse_failure_marker_path(path)
+            .is_some_and(|marker_path| marker_path.exists())
 }
