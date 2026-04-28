@@ -16,22 +16,20 @@ fof_formula = { fof_unit_formula ~ (binary_connective ~ fof_unit_formula)* }
 fof_binary_formula = { fof_unit_formula ~ binary_connective ~ fof_unit_formula ~ (binary_connective ~ fof_unit_formula)* }
 binary_connective = _{ assoc_connective | nonassoc_connective }
 assoc_connective = { "|" | "&" }
-nonassoc_connective = @{ "<=>" | "=>" | "<=" | "<~>" }
+nonassoc_connective = @{ "=>" }
 
 fof_unit_formula = { fof_unary_formula | fof_unitary_formula }
-fof_unary_formula = { unary_connective ~ fof_unit_formula | fof_infix_unary }
+fof_unary_formula = { unary_connective ~ fof_unit_formula }
 unary_connective = { "~" }
-fof_infix_unary = { fof_term ~ infix_inequality ~ fof_term }
 
 fof_unitary_formula = { fof_quantified_formula | fof_atomic_formula | "(" ~ fof_formula ~ ")" }
 fof_quantified_formula = { fof_quantifier ~ "[" ~ fof_variable_list ~ "]" ~ ":" ~ fof_unit_formula }
 fof_quantifier = { "!" | "?" }
 fof_variable_list = { variable ~ ("," ~ variable)* }
 
-fof_atomic_formula = { fof_defined_infix_formula | fof_plain_atomic_formula | fof_system_atomic_formula | fof_defined_atomic_formula }
+fof_atomic_formula = { fof_plain_atomic_formula | fof_system_atomic_formula | fof_defined_atomic_formula }
 fof_plain_atomic_formula = { fof_plain_term }
 fof_defined_atomic_formula = { fof_defined_plain_term }
-fof_defined_infix_formula = { fof_term ~ defined_infix_pred ~ fof_term }
 fof_system_atomic_formula = { fof_system_term }
 
 fof_term = { fof_function_term | variable }
@@ -44,8 +42,6 @@ fof_defined_atomic_term = { fof_defined_plain_term }
 fof_defined_plain_term = { defined_functor ~ "(" ~ fof_arguments ~ ")" | defined_constant }
 fof_system_term = { system_functor ~ "(" ~ fof_arguments ~ ")" | system_constant }
 
-defined_infix_pred = { "=" }
-infix_inequality = { "!=" }
 
 constant = { functor }
 functor = { atomic_word }
