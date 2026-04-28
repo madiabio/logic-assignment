@@ -60,3 +60,83 @@ fn rejects_problem_without_conjecture() {
 
     assert_eq!(err, SequentBuildError::MissingConjecture);
 }
+
+#[test]
+fn displays_sequents_with_expected_turnstile_layout() {
+    assert_eq!(
+        format!(
+            "{}",
+            Sequent {
+                left: vec![predicate_formula("p")],
+                right: vec![predicate_formula("q")],
+            }
+        ),
+        "p ⊢ q"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Sequent {
+                left: vec![predicate_formula("p"), predicate_formula("q")],
+                right: vec![predicate_formula("r"), predicate_formula("s")],
+            }
+        ),
+        "p, q ⊢ r, s"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Sequent {
+                left: Vec::new(),
+                right: vec![predicate_formula("q")],
+            }
+        ),
+        "⊢ q"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Sequent {
+                left: vec![predicate_formula("p")],
+                right: Vec::new(),
+            }
+        ),
+        "p ⊢"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            Sequent {
+                left: Vec::new(),
+                right: Vec::new(),
+            }
+        ),
+        "⊢"
+    );
+}
+
+#[test]
+fn displays_nested_formulas_inside_sequents() {
+    let left = Formula::And(vec![
+        predicate_formula("p"),
+        Formula::Implies(
+            Box::new(predicate_formula("q")),
+            Box::new(predicate_formula("r")),
+        ),
+    ]);
+    let right = Formula::Implies(
+        Box::new(Formula::And(vec![predicate_formula("s"), predicate_formula("t")])),
+        Box::new(predicate_formula("u")),
+    );
+
+    assert_eq!(
+        format!(
+            "{}",
+            Sequent {
+                left: vec![left],
+                right: vec![right],
+            }
+        ),
+        "p ∧ (q ⇒ r) ⊢ s ∧ t ⇒ u"
+    );
+}

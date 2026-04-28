@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term {
     Var(Var),
@@ -24,4 +26,51 @@ pub enum Symbol {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Var {
     pub name: String,
+}
+
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Symbol::User(value) | Symbol::Defined(value) | Symbol::System(value) => {
+                f.write_str(value)
+            }
+        }
+    }
+}
+
+impl fmt::Display for NumberLit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NumberLit::Integer(value) | NumberLit::Rational(value) | NumberLit::Real(value) => {
+                f.write_str(value)
+            }
+        }
+    }
+}
+
+impl fmt::Display for Var {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.name)
+    }
+}
+
+impl fmt::Display for Term {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Term::Var(var) => write!(f, "{var}"),
+            Term::Const(symbol) => write!(f, "{symbol}"),
+            Term::Fun { name, args } => {
+                write!(f, "{name}(")?;
+                for (index, arg) in args.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{arg}")?;
+                }
+                f.write_str(")")
+            }
+            Term::Number(number) => write!(f, "{number}"),
+            Term::DistinctObject(value) => f.write_str(value),
+        }
+    }
 }
