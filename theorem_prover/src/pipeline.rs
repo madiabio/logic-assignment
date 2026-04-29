@@ -16,7 +16,7 @@ pub fn run_problem(input: &str) -> Result<ProofResult, ProblemPipelineError> {
     run_problem_verbose(input, false)
 }
 
-// Prints the sequent before running the prbolem
+// Prints the sequent before running the problem
 pub fn run_problem_verbose(
     input: &str,
     show_sequent: bool,

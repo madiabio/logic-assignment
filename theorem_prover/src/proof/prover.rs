@@ -2,6 +2,7 @@
 use crate::Sequent;
 use crate::proof::apply::{RuleApplication, apply_rule};
 use crate::proof::rules::find_applicable_rules;
+use log::{debug, warn};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofStatus {
@@ -18,7 +19,7 @@ pub struct ProofResult {
 
 // public API
 pub fn prove(sequent: &Sequent) -> ProofResult {
-    let status = if prove_inner(sequent) {
+    let status = if backwards_search(sequent) {
         ProofStatus::Provable
     } else {
         ProofStatus::NotProvable
@@ -28,15 +29,18 @@ pub fn prove(sequent: &Sequent) -> ProofResult {
 }
 
 // Do backwards search as backtracking algorithm.
-fn prove_inner(sequent: &Sequent) -> bool {
+fn backwards_search(sequent: &Sequent) -> bool {
     find_applicable_rules(sequent)
         .iter()
         .any(|rule_match| match apply_rule(sequent, rule_match) {
             RuleApplication::Closed => true,
 
             // recursively prove the premises
-            RuleApplication::Premises(premises) => premises.iter().all(prove_inner),
+            RuleApplication::Premises(premises) => premises.iter().all(backwards_search),
 
-            RuleApplication::NotImplemented => false,
+            RuleApplication::NotImplemented => {
+                warn!("Not implemented rule: {:?}", rule_match);
+                false
+            }
         })
 }

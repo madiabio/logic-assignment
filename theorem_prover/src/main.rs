@@ -1,3 +1,4 @@
+use env_logger::Target;
 use std::env;
 use std::fs;
 use std::io;
@@ -30,6 +31,10 @@ struct RulesInspectionResult {
 }
 
 fn main() {
+    // init a logger
+    env_logger::Builder::new().target(Target::Stdout).init();
+
+    // parse cli args
     let Some(options) = parse_cli_args(env::args().skip(1)) else {
         print_usage_and_exit();
     };
