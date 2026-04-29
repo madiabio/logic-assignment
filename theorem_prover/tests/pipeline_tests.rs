@@ -1,11 +1,24 @@
 use theorem_prover::{ProblemPipelineError, ProofStatus, run_problem};
 
 #[test]
-fn run_problem_feeds_built_sequent_to_the_prover() {
+fn run_problem_returns_not_provable_for_atomic_dead_end_problem() {
     let result = run_problem(
         r#"
 fof(ax_1,axiom,p).
 fof(hyp_1,hypothesis,q).
+fof(conj_1,conjecture,r).
+"#,
+    )
+    .expect("pipeline should succeed");
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn run_problem_returns_not_implemented_for_problem_with_unimplemented_rule() {
+    let result = run_problem(
+        r#"
+fof(ax_1,axiom,(p & q)).
 fof(conj_1,conjecture,r).
 "#,
     )

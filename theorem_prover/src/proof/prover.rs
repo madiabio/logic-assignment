@@ -19,8 +19,11 @@ pub struct ProofResult {
 
 // public API
 pub fn prove(sequent: &Sequent) -> ProofResult {
-    let status = if backwards_search(sequent) {
+    let mut saw_not_implemented = false; // flag
+    let status = if backwards_search(sequent, &mut saw_not_implemented) {
         ProofStatus::Provable
+    } else if saw_not_implemented {
+        ProofStatus::NotImplemented
     } else {
         ProofStatus::NotProvable
     };
@@ -29,18 +32,21 @@ pub fn prove(sequent: &Sequent) -> ProofResult {
 }
 
 // Do backwards search as backtracking algorithm.
-fn backwards_search(sequent: &Sequent) -> bool {
+fn backwards_search(sequent: &Sequent, saw_not_implemented: &mut bool) -> bool {
     find_applicable_rules(sequent)
         .iter()
         .any(|rule_match| match apply_rule(sequent, rule_match) {
             RuleApplication::Closed => true,
 
-            // recursively prove the premises
-            RuleApplication::Premises(premises) => premises.iter().all(backwards_search),
-
             RuleApplication::NotImplemented => {
+                *saw_not_implemented = true;
                 warn!("Not implemented rule: {:?}", rule_match);
                 false
             }
+
+            // recursively prove the premises
+            RuleApplication::Premises(premises) => premises
+                .iter()
+                .all(|premise| backwards_search(premise, saw_not_implemented)),
         })
 }
