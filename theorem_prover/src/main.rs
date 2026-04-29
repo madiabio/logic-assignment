@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
-use theorem_prover::{ProblemPipelineError, build_problem_sequent, run_problem_with_sequent};
+use theorem_prover::{ProblemPipelineError, build_problem_sequent, run_problem_verbose};
 
 #[derive(Clone, Copy)]
 struct RunOptions {
@@ -145,7 +145,7 @@ fn prove_directory(dir: &Path, options: RunOptions) {
 fn prove_file(path: &Path, options: RunOptions) -> bool {
     let input = fs::read_to_string(path).expect("Failed to read input file");
 
-    match run_problem_with_sequent(&input, options.show_sequent) {
+    match run_problem_verbose(&input, options.show_sequent) {
         Ok(result) => {
             clear_parse_failure_marker(path);
             println!("{}: prover returned {:?}", path.display(), result.status);
@@ -315,6 +315,5 @@ fn clear_parse_failure_marker(path: &Path) {
 
 fn should_skip_parse_failed_file(path: &Path, options: RunOptions) -> bool {
     !options.retry_parse_failed
-        && parse_failure_marker_path(path)
-            .is_some_and(|marker_path| marker_path.exists())
+        && parse_failure_marker_path(path).is_some_and(|marker_path| marker_path.exists())
 }

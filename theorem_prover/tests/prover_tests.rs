@@ -69,3 +69,17 @@ fof(conj_1,conjecture,r).
 
     assert_eq!(result.status, ProofStatus::NotImplemented);
 }
+
+#[test]
+fn proves_identity_sequent() {
+    let p = predicate_formula("p");
+
+    let sequent = Sequent {
+        left: vec![p.clone()],
+        right: vec![p],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}

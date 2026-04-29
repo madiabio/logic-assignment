@@ -13,10 +13,11 @@ pub fn build_problem_sequent(input: &str) -> Result<Sequent, ProblemPipelineErro
 }
 
 pub fn run_problem(input: &str) -> Result<ProofResult, ProblemPipelineError> {
-    run_problem_with_sequent(input, false)
+    run_problem_verbose(input, false)
 }
 
-pub fn run_problem_with_sequent(
+// Prints the sequent before running the prbolem
+pub fn run_problem_verbose(
     input: &str,
     show_sequent: bool,
 ) -> Result<ProofResult, ProblemPipelineError> {

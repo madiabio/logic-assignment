@@ -1,5 +1,6 @@
+// Defines rules and whether or not they are valid on a particular sequent.
+use crate::Sequent;
 use crate::ast::Formula;
-use crate::sequent::Sequent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rule {

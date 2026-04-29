@@ -1,3 +1,4 @@
+// Defines sequents and their display properties.
 use std::fmt;
 
 use crate::ast::Formula;
