@@ -109,6 +109,34 @@ fn prove_returns_not_provable_after_applying_left_connective_rule() {
 }
 
 #[test]
+fn prove_returns_not_provable_when_andl_cannot_expose_identity() {
+    let sequent = Sequent {
+        left: vec![Formula::And(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_returns_provable_when_andl_exposes_identity() {
+    let sequent = Sequent {
+        left: vec![Formula::And(vec![predicate_formula("p"), predicate_formula("q")])],
+        right: vec![predicate_formula("p")],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
 fn apply_rule_expands_binary_right_disjunction_into_two_formulas() {
     let sequent = Sequent {
         left: vec![predicate_formula("p")],
@@ -175,6 +203,34 @@ fn prove_returns_not_provable_after_applying_right_connective_rule() {
     let result = prove(&sequent);
 
     assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_returns_not_provable_when_orr_cannot_expose_identity() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("source")],
+        right: vec![Formula::Or(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_returns_provable_when_orr_exposes_identity() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("p")],
+        right: vec![Formula::Or(vec![predicate_formula("p"), predicate_formula("q")])],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
 }
 
 #[test]
