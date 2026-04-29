@@ -93,6 +93,32 @@ fof(conj_1,conjecture,(p | q)).
 }
 
 #[test]
+fn run_problem_returns_not_provable_for_problem_with_right_implication() {
+    let result = run_problem(
+        r#"
+fof(ax_1,axiom,q).
+fof(conj_1,conjecture,(p => r)).
+"#,
+    )
+    .expect("pipeline should succeed");
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn run_problem_returns_provable_for_problem_where_impliesr_exposes_identity() {
+    let result = run_problem(
+        r#"
+fof(ax_1,axiom,q).
+fof(conj_1,conjecture,(p => q)).
+"#,
+    )
+    .expect("pipeline should succeed");
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
 fn run_problem_reports_parse_failures() {
     let err = run_problem("fof(bad,axiom,(p(a)).").expect_err("pipeline should reject bad syntax");
 

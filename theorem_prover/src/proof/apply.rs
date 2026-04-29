@@ -17,6 +17,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::Id | Rule::TopR | Rule::BottomL => RuleApplication::Closed,
         Rule::AndL => apply_and_l(sequent, rule_match.index),
         Rule::OrR => apply_or_r(sequent, rule_match.index),
+        Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
 
         _ => RuleApplication::NotImplemented,
     }
@@ -74,4 +75,21 @@ fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
         left: sequent.left.clone(),
         right,
     }])
+}
+
+fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Implies(left_formula, right_formula)) = sequent.right.get(index) else {
+        return RuleApplication::NotImplemented;
+    };
+
+    let mut left = Vec::with_capacity(sequent.left.len() + 1);
+    left.extend(sequent.left.iter().cloned());
+    left.push((**left_formula).clone());
+
+    let mut right = Vec::with_capacity(sequent.right.len());
+    right.extend(sequent.right[..index].iter().cloned());
+    right.push((**right_formula).clone());
+    right.extend(sequent.right[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent { left, right }])
 }

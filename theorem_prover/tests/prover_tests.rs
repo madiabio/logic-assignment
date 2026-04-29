@@ -3,6 +3,32 @@ use theorem_prover::proof::apply::{RuleApplication, apply_rule};
 use theorem_prover::proof::rules::{Rule, RuleMatch, Side};
 use theorem_prover::{ProofResult, ProofStatus, Sequent, parse_problem, prove};
 
+fn trace_rule_applications_enabled() -> bool {
+    std::env::var("RULE_TRACE")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn apply_rule_with_optional_trace(sequent: &Sequent, rule_match: RuleMatch) -> RuleApplication {
+    let application = apply_rule(sequent, &rule_match);
+
+    if trace_rule_applications_enabled() {
+        println!("Applying {:?} on {:?}[{}]", rule_match.rule, rule_match.side, rule_match.index);
+        println!("  Input: {sequent}");
+        match &application {
+            RuleApplication::Closed => println!("  Result: closed"),
+            RuleApplication::NotImplemented => println!("  Result: not implemented"),
+            RuleApplication::Premises(premises) => {
+                for (index, premise) in premises.iter().enumerate() {
+                    println!("  Premise {}: {}", index + 1, premise);
+                }
+            }
+        }
+    }
+
+    application
+}
+
 fn predicate_formula(name: &str) -> Formula {
     Formula::Atom(Atom::Predicate {
         name: Symbol::User(name.to_owned()),
@@ -42,13 +68,16 @@ fn prove_returns_not_provable_for_empty_left_atomic_goal() {
 #[test]
 fn apply_rule_expands_binary_left_conjunction_into_two_formulas() {
     let sequent = Sequent {
-        left: vec![Formula::And(vec![predicate_formula("p"), predicate_formula("q")])],
+        left: vec![Formula::And(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
         right: vec![predicate_formula("r")],
     };
 
-    let application = apply_rule(
+    let application = apply_rule_with_optional_trace(
         &sequent,
-        &RuleMatch {
+        RuleMatch {
             rule: Rule::AndL,
             side: Side::Left,
             index: 0,
@@ -75,9 +104,9 @@ fn apply_rule_peels_leftmost_formula_from_multiway_left_conjunction() {
         right: vec![predicate_formula("goal")],
     };
 
-    let application = apply_rule(
+    let application = apply_rule_with_optional_trace(
         &sequent,
-        &RuleMatch {
+        RuleMatch {
             rule: Rule::AndL,
             side: Side::Left,
             index: 0,
@@ -99,7 +128,10 @@ fn apply_rule_peels_leftmost_formula_from_multiway_left_conjunction() {
 #[test]
 fn prove_returns_not_provable_after_applying_left_connective_rule() {
     let sequent = Sequent {
-        left: vec![Formula::And(vec![predicate_formula("p"), predicate_formula("q")])],
+        left: vec![Formula::And(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
         right: vec![predicate_formula("r")],
     };
 
@@ -127,7 +159,10 @@ fn prove_returns_not_provable_when_andl_cannot_expose_identity() {
 #[test]
 fn prove_returns_provable_when_andl_exposes_identity() {
     let sequent = Sequent {
-        left: vec![Formula::And(vec![predicate_formula("p"), predicate_formula("q")])],
+        left: vec![Formula::And(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
         right: vec![predicate_formula("p")],
     };
 
@@ -140,12 +175,15 @@ fn prove_returns_provable_when_andl_exposes_identity() {
 fn apply_rule_expands_binary_right_disjunction_into_two_formulas() {
     let sequent = Sequent {
         left: vec![predicate_formula("p")],
-        right: vec![Formula::Or(vec![predicate_formula("q"), predicate_formula("r")])],
+        right: vec![Formula::Or(vec![
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
     };
 
-    let application = apply_rule(
+    let application = apply_rule_with_optional_trace(
         &sequent,
-        &RuleMatch {
+        RuleMatch {
             rule: Rule::OrR,
             side: Side::Right,
             index: 0,
@@ -172,9 +210,9 @@ fn apply_rule_peels_leftmost_formula_from_multiway_right_disjunction() {
         ])],
     };
 
-    let application = apply_rule(
+    let application = apply_rule_with_optional_trace(
         &sequent,
-        &RuleMatch {
+        RuleMatch {
             rule: Rule::OrR,
             side: Side::Right,
             index: 0,
@@ -197,7 +235,10 @@ fn apply_rule_peels_leftmost_formula_from_multiway_right_disjunction() {
 fn prove_returns_not_provable_after_applying_right_connective_rule() {
     let sequent = Sequent {
         left: vec![predicate_formula("p")],
-        right: vec![Formula::Or(vec![predicate_formula("q"), predicate_formula("r")])],
+        right: vec![Formula::Or(vec![
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
     };
 
     let result = prove(&sequent);
@@ -225,7 +266,68 @@ fn prove_returns_not_provable_when_orr_cannot_expose_identity() {
 fn prove_returns_provable_when_orr_exposes_identity() {
     let sequent = Sequent {
         left: vec![predicate_formula("p")],
-        right: vec![Formula::Or(vec![predicate_formula("p"), predicate_formula("q")])],
+        right: vec![Formula::Or(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn apply_rule_moves_implication_antecedent_left_and_consequent_right() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("q")],
+        right: vec![Formula::Implies(
+            Box::new(predicate_formula("p")),
+            Box::new(predicate_formula("r")),
+        )],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ImpliesR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula("q"), predicate_formula("p")],
+            right: vec![predicate_formula("r")],
+        }])
+    );
+}
+
+#[test]
+fn prove_returns_not_provable_after_applying_implies_right_rule() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("q")],
+        right: vec![Formula::Implies(
+            Box::new(predicate_formula("p")),
+            Box::new(predicate_formula("r")),
+        )],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_returns_provable_when_impliesr_exposes_identity() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("q")],
+        right: vec![Formula::Implies(
+            Box::new(predicate_formula("p")),
+            Box::new(predicate_formula("q")),
+        )],
     };
 
     let result = prove(&sequent);
