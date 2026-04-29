@@ -131,10 +131,7 @@ fof(conj_1,conjecture,p).
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(!stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("prover returned NotImplemented"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("prover returned Provable"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -161,10 +158,7 @@ fof(conj_1,conjecture,p).
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("prover returned NotImplemented"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("prover returned Provable"), "stdout was:\n{stdout}");
 }
 
 #[test]

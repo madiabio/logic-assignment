@@ -15,7 +15,7 @@ fof(conj_1,conjecture,r).
 }
 
 #[test]
-fn run_problem_returns_not_implemented_for_problem_with_unimplemented_rule() {
+fn run_problem_returns_not_provable_for_problem_with_left_conjunction() {
     let result = run_problem(
         r#"
 fof(ax_1,axiom,(p & q)).
@@ -24,7 +24,7 @@ fof(conj_1,conjecture,r).
     )
     .expect("pipeline should succeed");
 
-    assert_eq!(result.status, ProofStatus::NotImplemented);
+    assert_eq!(result.status, ProofStatus::NotProvable);
 }
 
 #[test]

@@ -2,7 +2,7 @@
 use crate::Sequent;
 use crate::proof::apply::{RuleApplication, apply_rule};
 use crate::proof::rules::find_applicable_rules;
-use log::{debug, warn};
+use log::warn;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofStatus {
