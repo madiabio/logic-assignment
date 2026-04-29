@@ -16,6 +16,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         // All of these rules close a branch.
         Rule::Id | Rule::TopR | Rule::BottomL => RuleApplication::Closed,
         Rule::AndL => apply_and_l(sequent, rule_match.index),
+        Rule::OrR => apply_or_r(sequent, rule_match.index),
 
         _ => RuleApplication::NotImplemented,
     }
@@ -45,5 +46,32 @@ fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
     RuleApplication::Premises(vec![Sequent {
         left,
         right: sequent.right.clone(),
+    }])
+}
+
+fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Or(items)) = sequent.right.get(index) else {
+        return RuleApplication::NotImplemented;
+    };
+
+    if items.len() < 2 {
+        return RuleApplication::NotImplemented;
+    }
+
+    let mut right = Vec::with_capacity(sequent.right.len() + 1);
+    right.extend(sequent.right[..index].iter().cloned());
+
+    right.push(items[0].clone());
+    if items.len() == 2 {
+        right.push(items[1].clone());
+    } else {
+        right.push(Formula::Or(items[1..].to_vec()));
+    }
+
+    right.extend(sequent.right[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent {
+        left: sequent.left.clone(),
+        right,
     }])
 }

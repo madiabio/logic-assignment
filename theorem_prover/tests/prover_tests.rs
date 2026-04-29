@@ -109,7 +109,64 @@ fn prove_returns_not_provable_after_applying_left_connective_rule() {
 }
 
 #[test]
-fn prove_returns_not_implemented_for_right_connective_rule() {
+fn apply_rule_expands_binary_right_disjunction_into_two_formulas() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("p")],
+        right: vec![Formula::Or(vec![predicate_formula("q"), predicate_formula("r")])],
+    };
+
+    let application = apply_rule(
+        &sequent,
+        &RuleMatch {
+            rule: Rule::OrR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula("p")],
+            right: vec![predicate_formula("q"), predicate_formula("r")],
+        }])
+    );
+}
+
+#[test]
+fn apply_rule_peels_leftmost_formula_from_multiway_right_disjunction() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("source")],
+        right: vec![Formula::Or(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
+    };
+
+    let application = apply_rule(
+        &sequent,
+        &RuleMatch {
+            rule: Rule::OrR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula("source")],
+            right: vec![
+                predicate_formula("p"),
+                Formula::Or(vec![predicate_formula("q"), predicate_formula("r")]),
+            ],
+        }])
+    );
+}
+
+#[test]
+fn prove_returns_not_provable_after_applying_right_connective_rule() {
     let sequent = Sequent {
         left: vec![predicate_formula("p")],
         right: vec![Formula::Or(vec![predicate_formula("q"), predicate_formula("r")])],
@@ -117,7 +174,7 @@ fn prove_returns_not_implemented_for_right_connective_rule() {
 
     let result = prove(&sequent);
 
-    assert_eq!(result.status, ProofStatus::NotImplemented);
+    assert_eq!(result.status, ProofStatus::NotProvable);
 }
 
 #[test]
