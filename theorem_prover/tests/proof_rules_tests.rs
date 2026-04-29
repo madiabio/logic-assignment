@@ -42,6 +42,37 @@ fn finds_identity_rule_for_matching_formula_on_both_sides() {
 }
 
 #[test]
+fn finds_identity_rule_for_each_matching_left_formula() {
+    let p = atom("p");
+    let q = atom("q");
+    let sequent = Sequent {
+        left: vec![p.clone(), q.clone(), p.clone()],
+        right: vec![q, p],
+    };
+
+    assert_eq!(
+        find_applicable_rules(&sequent),
+        vec![
+            RuleMatch {
+                rule: Rule::Id,
+                side: Side::Left,
+                index: 0,
+            },
+            RuleMatch {
+                rule: Rule::Id,
+                side: Side::Left,
+                index: 1,
+            },
+            RuleMatch {
+                rule: Rule::Id,
+                side: Side::Left,
+                index: 2,
+            },
+        ]
+    );
+}
+
+#[test]
 fn finds_top_right_rule() {
     let sequent = Sequent {
         left: vec![atom("p")],

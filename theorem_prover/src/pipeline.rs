@@ -13,7 +13,16 @@ pub fn build_problem_sequent(input: &str) -> Result<Sequent, ProblemPipelineErro
 }
 
 pub fn run_problem(input: &str) -> Result<ProofResult, ProblemPipelineError> {
+    run_problem_with_sequent(input, false)
+}
+
+pub fn run_problem_with_sequent(
+    input: &str,
+    show_sequent: bool,
+) -> Result<ProofResult, ProblemPipelineError> {
     let sequent = build_problem_sequent(input)?;
-    println!("{sequent}");
+    if show_sequent {
+        println!("{sequent}");
+    }
     Ok(prove(&sequent))
 }

@@ -36,17 +36,18 @@ pub struct RuleMatch {
 pub fn find_applicable_rules(sequent: &Sequent) -> Vec<RuleMatch> {
     let mut matches = Vec::new();
 
-    if let Some(index) = sequent.left.iter().position(|left_formula| {
-        sequent
+    for (index, left_formula) in sequent.left.iter().enumerate() {
+        if sequent
             .right
             .iter()
             .any(|right_formula| right_formula == left_formula)
-    }) {
-        matches.push(RuleMatch {
-            rule: Rule::Id,
-            side: Side::Left,
-            index,
-        });
+        {
+            matches.push(RuleMatch {
+                rule: Rule::Id,
+                side: Side::Left,
+                index,
+            });
+        }
     }
 
     for (index, formula) in sequent.left.iter().enumerate() {

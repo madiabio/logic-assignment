@@ -36,7 +36,11 @@ fof(conj_1,conjecture,p).
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args([
+            "--rules",
+            "--show-sequent",
+            input.to_str().expect("path should be utf-8"),
+        ])
         .output()
         .expect("binary should run");
 
@@ -52,6 +56,115 @@ fof(conj_1,conjecture,p).
     );
     assert!(stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
     assert!(stdout.contains("Id"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn rules_subcommand_hides_sequent_by_default() {
+    let dir = make_temp_dir("rules_hide_sequent");
+    let input = write_problem_file(
+        &dir,
+        "identity_hidden.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(!stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Id"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn rules_subcommand_prints_sequent_when_show_sequent_flag_is_present() {
+    let dir = make_temp_dir("rules_show_sequent");
+    let input = write_problem_file(
+        &dir,
+        "identity_visible.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args([
+            "--rules",
+            "--show-sequent",
+            input.to_str().expect("path should be utf-8"),
+        ])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Id"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prover_mode_hides_sequent_by_default() {
+    let dir = make_temp_dir("prover_hide_sequent");
+    let input = write_problem_file(
+        &dir,
+        "identity_default.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .arg(input.to_str().expect("path should be utf-8"))
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(!stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("prover returned NotImplemented"),
+        "stdout was:\n{stdout}"
+    );
+}
+
+#[test]
+fn prover_mode_prints_sequent_when_show_sequent_flag_is_present() {
+    let dir = make_temp_dir("prover_show_sequent");
+    let input = write_problem_file(
+        &dir,
+        "identity_visible.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args([
+            "--show-sequent",
+            input.to_str().expect("path should be utf-8"),
+        ])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("prover returned NotImplemented"),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]
@@ -74,7 +187,6 @@ fof(conj_1,conjecture,q).
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
-    assert!(stdout.contains("p ⊢ q"), "stdout was:\n{stdout}");
     assert!(
         stdout.contains("no applicable rules"),
         "stdout was:\n{stdout}"
@@ -126,6 +238,10 @@ fof(conj_1,conjecture,p).
     );
     assert!(stdout.contains("Succeeded: 2"), "stdout was:\n{stdout}");
     assert!(stdout.contains("Failed: 0"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("Problems with rule matches: 2"),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]
