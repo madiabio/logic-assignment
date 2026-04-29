@@ -116,6 +116,44 @@ fn parses_mixed_binary_connectives_with_tptp_left_association() {
     }
 }
 
+#[test]
+fn rewrites_iff_into_conjunction_of_implications() {
+    let parsed = parse_problem("fof(iff_rule,axiom,(p <=> q)).").expect("formula should parse");
+
+    match first_premise_formula(&parsed) {
+        Formula::And(items) => {
+            assert_eq!(items.len(), 2);
+            assert_eq!(
+                items[0],
+                Formula::Implies(
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("p".to_owned()),
+                        args: vec![],
+                    })),
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("q".to_owned()),
+                        args: vec![],
+                    })),
+                )
+            );
+            assert_eq!(
+                items[1],
+                Formula::Implies(
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("q".to_owned()),
+                        args: vec![],
+                    })),
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("p".to_owned()),
+                        args: vec![],
+                    })),
+                )
+            );
+        }
+        other => panic!("expected iff to rewrite to conjunction of implications, got {other:?}"),
+    }
+}
+
 fn maps_true_false_constants_to_formula_variants() {
     let parsed = parse_problem("fof(tf,axiom,($true | $false)).").expect("formula should parse");
 
@@ -240,7 +278,6 @@ fn rejects_malformed_numeric_literal_shape() {
 #[test]
 fn rejects_removed_connectives_and_equality_syntax() {
     for input in [
-        "fof(bad_iff,axiom,(p <=> q)).",
         "fof(bad_xor,axiom,(p <~> q)).",
         "fof(bad_lte,axiom,(p <= q)).",
         "fof(bad_eq,axiom,(a = b)).",

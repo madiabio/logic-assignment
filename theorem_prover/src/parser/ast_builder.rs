@@ -326,6 +326,10 @@ fn combine_binary(left: Formula, operator: &str, right: Formula) -> Formula {
         "&" => merge_associative(left, right, true),
         "|" => merge_associative(left, right, false),
         "=>" => Formula::Implies(Box::new(left), Box::new(right)),
+        "<=>" => Formula::And(vec![
+            Formula::Implies(Box::new(left.clone()), Box::new(right.clone())),
+            Formula::Implies(Box::new(right), Box::new(left)),
+        ]),
         _ => panic!("unsupported binary connective: {operator}"),
     }
 }

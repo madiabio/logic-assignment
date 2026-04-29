@@ -16,7 +16,7 @@ fof_formula = { fof_unit_formula ~ (binary_connective ~ fof_unit_formula)* }
 fof_binary_formula = { fof_unit_formula ~ binary_connective ~ fof_unit_formula ~ (binary_connective ~ fof_unit_formula)* }
 binary_connective = _{ assoc_connective | nonassoc_connective }
 assoc_connective = { "|" | "&" }
-nonassoc_connective = @{ "=>" }
+nonassoc_connective = @{ "<=>" | "=>" }
 
 fof_unit_formula = { fof_unary_formula | fof_unitary_formula }
 fof_unary_formula = { unary_connective ~ fof_unit_formula }
