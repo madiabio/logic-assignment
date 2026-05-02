@@ -16,6 +16,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         // All of these rules close a branch.
         Rule::Id | Rule::TopR | Rule::BottomL => RuleApplication::Closed,
         Rule::AndL => apply_and_l(sequent, rule_match.index),
+        Rule::AndR => apply_and_r(sequent, rule_match.index),
         Rule::OrR => apply_or_r(sequent, rule_match.index),
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
         Rule::NotL => apply_not_l(sequent, rule_match.index),
@@ -53,6 +54,44 @@ fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
         left,
         right: sequent.right.clone(),
     }])
+}
+
+fn apply_and_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::And(items)) = sequent.right.get(index) else {
+        return RuleApplication::NotImplemented;
+    };
+
+    if items.len() < 2 {
+        return RuleApplication::NotImplemented;
+    }
+
+    // Gamma |- A /\ B, Delta branches into Gamma |- A, Delta and
+    // Gamma |- B, Delta. For n-ary conjunctions, keep the tail grouped so
+    // repeated AndR applications continue shrinking the formula.
+    let mut first_right = Vec::with_capacity(sequent.right.len());
+    first_right.extend(sequent.right[..index].iter().cloned());
+    first_right.push(items[0].clone());
+    first_right.extend(sequent.right[index + 1..].iter().cloned());
+
+    let mut second_right = Vec::with_capacity(sequent.right.len());
+    second_right.extend(sequent.right[..index].iter().cloned());
+    if items.len() == 2 {
+        second_right.push(items[1].clone());
+    } else {
+        second_right.push(Formula::And(items[1..].to_vec()));
+    }
+    second_right.extend(sequent.right[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![
+        Sequent {
+            left: sequent.left.clone(),
+            right: first_right,
+        },
+        Sequent {
+            left: sequent.left.clone(),
+            right: second_right,
+        },
+    ])
 }
 
 fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {

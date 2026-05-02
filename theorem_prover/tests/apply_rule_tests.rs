@@ -97,6 +97,121 @@ fn apply_rule_peels_leftmost_formula_from_multiway_left_conjunction() {
 }
 
 #[test]
+fn apply_rule_branches_binary_right_conjunction_into_two_premises() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("source")],
+        right: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::AndR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![predicate_formula("source")],
+                right: vec![predicate_formula("p")],
+            },
+            Sequent {
+                left: vec![predicate_formula("source")],
+                right: vec![predicate_formula("q")],
+            },
+        ])
+    );
+}
+
+#[test]
+fn apply_rule_peels_leftmost_formula_from_multiway_right_conjunction() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("source")],
+        right: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::AndR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![predicate_formula("source")],
+                right: vec![predicate_formula("p")],
+            },
+            Sequent {
+                left: vec![predicate_formula("source")],
+                right: vec![Formula::and(vec![
+                    predicate_formula("q"),
+                    predicate_formula("r"),
+                ])],
+            },
+        ])
+    );
+}
+
+#[test]
+fn apply_rule_preserves_other_right_formulas_when_applying_andr() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("left")],
+        right: vec![
+            predicate_formula("before"),
+            Formula::and(vec![predicate_formula("p"), predicate_formula("q")]),
+            predicate_formula("after"),
+        ],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::AndR,
+            side: Side::Right,
+            index: 1,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![predicate_formula("left")],
+                right: vec![
+                    predicate_formula("before"),
+                    predicate_formula("p"),
+                    predicate_formula("after"),
+                ],
+            },
+            Sequent {
+                left: vec![predicate_formula("left")],
+                right: vec![
+                    predicate_formula("before"),
+                    predicate_formula("q"),
+                    predicate_formula("after"),
+                ],
+            },
+        ])
+    );
+}
+
+#[test]
 fn apply_rule_expands_binary_right_disjunction_into_two_formulas() {
     let sequent = Sequent {
         left: vec![predicate_formula("p")],

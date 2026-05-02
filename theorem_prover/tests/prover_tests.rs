@@ -81,6 +81,56 @@ fn prove_returns_provable_when_andl_exposes_identity() {
 }
 
 #[test]
+fn prove_returns_provable_when_andr_exposes_identity_on_both_branches() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("p"), predicate_formula("q")],
+        right: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn prove_returns_not_provable_when_only_one_andr_branch_closes() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("p")],
+        right: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_reduces_multiway_andr_recursively() {
+    let sequent = Sequent {
+        left: vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ],
+        right: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
 fn prove_returns_not_provable_after_applying_right_connective_rule() {
     let sequent = Sequent {
         left: vec![predicate_formula("p")],
