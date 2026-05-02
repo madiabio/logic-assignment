@@ -9,14 +9,18 @@ pub enum RuleApplication {
     Closed,
     Premises(Vec<Sequent>),
     NotImplemented,
+    Error,
 }
 
 pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication {
     match rule_match.rule {
         // All of these rules close a branch.
         Rule::Id | Rule::TopR | Rule::BottomL => RuleApplication::Closed,
+
+        // These are not branch closing.
         Rule::AndL => apply_and_l(sequent, rule_match.index),
         Rule::AndR => apply_and_r(sequent, rule_match.index),
+        Rule::OrL => apply_or_l(sequent, rule_match.index),
         Rule::OrR => apply_or_r(sequent, rule_match.index),
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
         Rule::NotL => apply_not_l(sequent, rule_match.index),
@@ -29,11 +33,11 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
 fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
     // TODO: Check the NotImplemented stuff, it probs shouldnt be returning NotImplemented
     let Some(Formula::And(items)) = sequent.left.get(index) else {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
     };
 
     if items.len() < 2 {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
     }
 
     let mut left = Vec::with_capacity(sequent.left.len() + 1);
@@ -58,11 +62,11 @@ fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
 
 fn apply_and_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::And(items)) = sequent.right.get(index) else {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
     };
 
     if items.len() < 2 {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
     }
 
     // Gamma |- A /\ B, Delta branches into Gamma |- A, Delta and
@@ -94,13 +98,51 @@ fn apply_and_r(sequent: &Sequent, index: usize) -> RuleApplication {
     ])
 }
 
-fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
-    let Some(Formula::Or(items)) = sequent.right.get(index) else {
-        return RuleApplication::NotImplemented;
+fn apply_or_l(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Or(items)) = sequent.left.get(index) else {
+        return RuleApplication::Error;
     };
 
     if items.len() < 2 {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
+    }
+
+    // Gamma, A \/ B |- Delta branches into Gamma, A |- Delta and
+    // Gamma, B |- Delta. For n-ary disjunctions, keep the tail grouped so
+    // repeated OrL applications continue shrinking the formula.
+    let mut first_left = Vec::with_capacity(sequent.left.len());
+    first_left.extend(sequent.left[..index].iter().cloned());
+    first_left.push(items[0].clone());
+    first_left.extend(sequent.left[index + 1..].iter().cloned());
+
+    let mut second_left = Vec::with_capacity(sequent.left.len());
+    second_left.extend(sequent.left[..index].iter().cloned());
+    if items.len() == 2 {
+        second_left.push(items[1].clone());
+    } else {
+        second_left.push(Formula::Or(items[1..].to_vec()));
+    }
+    second_left.extend(sequent.left[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![
+        Sequent {
+            left: first_left,
+            right: sequent.right.clone(),
+        },
+        Sequent {
+            left: second_left,
+            right: sequent.right.clone(),
+        },
+    ])
+}
+
+fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Or(items)) = sequent.right.get(index) else {
+        return RuleApplication::Error;
+    };
+
+    if items.len() < 2 {
+        return RuleApplication::Error;
     }
 
     let mut right = Vec::with_capacity(sequent.right.len() + 1);
@@ -125,7 +167,7 @@ fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
 
 fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Implies(left_formula, right_formula)) = sequent.right.get(index) else {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
     };
 
     let mut left = Vec::with_capacity(sequent.left.len() + 1);
@@ -143,7 +185,7 @@ fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
 
 fn apply_not_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Not(inner)) = sequent.left.get(index) else {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
     };
 
     let mut left = Vec::with_capacity(sequent.left.len().saturating_sub(1));
@@ -160,7 +202,7 @@ fn apply_not_l(sequent: &Sequent, index: usize) -> RuleApplication {
 
 fn apply_not_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Not(inner)) = sequent.right.get(index) else {
-        return RuleApplication::NotImplemented;
+        return RuleApplication::Error;
     };
 
     let mut left = Vec::with_capacity(sequent.left.len() + 1);

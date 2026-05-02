@@ -21,6 +21,7 @@ fn apply_rule_with_optional_trace(sequent: &Sequent, rule_match: RuleMatch) -> R
         match &application {
             RuleApplication::Closed => println!("  Result: closed"),
             RuleApplication::NotImplemented => println!("  Result: not implemented"),
+            RuleApplication::Error => println!("  Result: error"),
             RuleApplication::Premises(premises) => {
                 for (index, premise) in premises.iter().enumerate() {
                     println!("  Premise {}: {}", index + 1, premise);
@@ -93,6 +94,121 @@ fn apply_rule_peels_leftmost_formula_from_multiway_left_conjunction() {
             ],
             right: vec![predicate_formula("goal")],
         }])
+    );
+}
+
+#[test]
+fn apply_rule_branches_binary_left_disjunction_into_two_premises() {
+    let sequent = Sequent {
+        left: vec![Formula::or(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::OrL,
+            side: Side::Left,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![predicate_formula("p")],
+                right: vec![predicate_formula("goal")],
+            },
+            Sequent {
+                left: vec![predicate_formula("q")],
+                right: vec![predicate_formula("goal")],
+            },
+        ])
+    );
+}
+
+#[test]
+fn apply_rule_peels_leftmost_formula_from_multiway_left_disjunction() {
+    let sequent = Sequent {
+        left: vec![Formula::or(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+            predicate_formula("r"),
+        ])],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::OrL,
+            side: Side::Left,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![predicate_formula("p")],
+                right: vec![predicate_formula("goal")],
+            },
+            Sequent {
+                left: vec![Formula::or(vec![
+                    predicate_formula("q"),
+                    predicate_formula("r"),
+                ])],
+                right: vec![predicate_formula("goal")],
+            },
+        ])
+    );
+}
+
+#[test]
+fn apply_rule_preserves_other_left_formulas_when_applying_orl() {
+    let sequent = Sequent {
+        left: vec![
+            predicate_formula("before"),
+            Formula::or(vec![predicate_formula("p"), predicate_formula("q")]),
+            predicate_formula("after"),
+        ],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::OrL,
+            side: Side::Left,
+            index: 1,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![
+                    predicate_formula("before"),
+                    predicate_formula("p"),
+                    predicate_formula("after"),
+                ],
+                right: vec![predicate_formula("goal")],
+            },
+            Sequent {
+                left: vec![
+                    predicate_formula("before"),
+                    predicate_formula("q"),
+                    predicate_formula("after"),
+                ],
+                right: vec![predicate_formula("goal")],
+            },
+        ])
     );
 }
 
