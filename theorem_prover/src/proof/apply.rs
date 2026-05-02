@@ -17,15 +17,17 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         // All of these rules close a branch.
         Rule::Id | Rule::TopR | Rule::BottomL => RuleApplication::Closed,
 
-        // These are not branch closing.
+        // These are not branch closing, and don't create a new branch
         Rule::AndL => apply_and_l(sequent, rule_match.index),
-        Rule::AndR => apply_and_r(sequent, rule_match.index),
-        Rule::OrL => apply_or_l(sequent, rule_match.index),
         Rule::OrR => apply_or_r(sequent, rule_match.index),
-        Rule::ImpliesL => apply_implies_l(sequent, rule_match.index),
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
         Rule::NotL => apply_not_l(sequent, rule_match.index),
         Rule::NotR => apply_not_r(sequent, rule_match.index),
+
+        // These are branch closing, and create new branch
+        Rule::AndR => apply_and_r(sequent, rule_match.index),
+        Rule::OrL => apply_or_l(sequent, rule_match.index),
+        Rule::ImpliesL => apply_implies_l(sequent, rule_match.index),
 
         _ => RuleApplication::NotImplemented,
     }
