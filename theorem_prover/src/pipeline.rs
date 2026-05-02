@@ -1,4 +1,6 @@
-use crate::{ParsedProblem, ProofResult, Sequent, SequentBuildError, parse_problem, prove};
+use crate::{
+    ParsedProblem, ProofOptions, ProofResult, Sequent, SequentBuildError, parse_problem, prove,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProblemPipelineError {
@@ -25,5 +27,5 @@ pub fn run_problem_verbose(
     if show_sequent {
         println!("{sequent}");
     }
-    Ok(prove(&sequent))
+    Ok(prove(&sequent, ProofOptions::default()))
 }

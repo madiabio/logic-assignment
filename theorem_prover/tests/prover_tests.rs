@@ -1,8 +1,30 @@
+use std::time::Duration;
+
 use theorem_prover::ast::Formula;
-use theorem_prover::{ProofResult, ProofStatus, Sequent, parse_problem, prove};
+use theorem_prover::{ProofOptions, ProofResult, ProofStatus, Sequent, parse_problem, prove};
 
 fn predicate_formula(name: &str) -> Formula {
     Formula::atom(name)
+}
+
+fn left_disjunction_timeout_sequent(width: usize) -> Sequent {
+    let left = (0..width)
+        .map(|index| {
+            Formula::or(vec![
+                predicate_formula(&format!("p{index}")),
+                predicate_formula(&format!("q{index}")),
+            ])
+        })
+        .collect();
+
+    Sequent {
+        left,
+        right: vec![predicate_formula("goal")],
+    }
+}
+
+fn default_options() -> ProofOptions {
+    ProofOptions::default()
 }
 
 #[test]
@@ -12,7 +34,7 @@ fn prove_returns_not_provable_for_atomic_dead_end_sequent() {
         right: vec![predicate_formula("r")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(
         result,
@@ -29,7 +51,7 @@ fn prove_returns_not_provable_for_empty_left_atomic_goal() {
         right: vec![predicate_formula("goal")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -44,7 +66,7 @@ fn prove_returns_not_provable_after_applying_left_connective_rule() {
         right: vec![predicate_formula("r")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -60,7 +82,7 @@ fn prove_returns_not_provable_when_andl_cannot_expose_identity() {
         right: vec![predicate_formula("goal")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -75,7 +97,7 @@ fn prove_returns_provable_when_andl_exposes_identity() {
         right: vec![predicate_formula("p")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -90,7 +112,7 @@ fn prove_returns_provable_when_orl_exposes_identity_on_both_branches() {
         right: vec![predicate_formula("p"), predicate_formula("q")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -105,7 +127,7 @@ fn prove_returns_not_provable_when_only_one_orl_branch_closes() {
         right: vec![predicate_formula("p")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -125,7 +147,7 @@ fn prove_reduces_multiway_orl_recursively() {
         ],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -140,7 +162,7 @@ fn prove_returns_provable_when_andr_exposes_identity_on_both_branches() {
         ])],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -155,7 +177,7 @@ fn prove_returns_not_provable_when_only_one_andr_branch_closes() {
         ])],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -175,7 +197,7 @@ fn prove_reduces_multiway_andr_recursively() {
         ])],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -190,7 +212,7 @@ fn prove_returns_not_provable_after_applying_right_connective_rule() {
         ])],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -206,7 +228,7 @@ fn prove_returns_not_provable_when_orr_cannot_expose_identity() {
         ])],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -221,7 +243,7 @@ fn prove_returns_provable_when_orr_exposes_identity() {
         ])],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -233,7 +255,7 @@ fn prove_returns_not_provable_after_applying_implies_right_rule() {
         right: vec![Formula::implies(predicate_formula("p"), predicate_formula("r"))],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -245,7 +267,7 @@ fn prove_returns_provable_when_impliesr_exposes_identity() {
         right: vec![Formula::implies(predicate_formula("p"), predicate_formula("q"))],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -260,7 +282,7 @@ fn prove_returns_provable_for_modus_ponens_shape_via_impliesl() {
         right: vec![predicate_formula("q")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -272,9 +294,30 @@ fn prove_returns_not_provable_when_impliesl_leaves_an_open_branch() {
         right: vec![predicate_formula("q")],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_returns_timeout_for_large_left_branching_search() {
+    let sequent = left_disjunction_timeout_sequent(24);
+
+    let result = prove(&sequent, default_options());
+
+    assert_eq!(result.status, ProofStatus::Timeout);
+}
+
+#[test]
+fn prove_respects_custom_timeout_options() {
+    let sequent = left_disjunction_timeout_sequent(24);
+    let options = ProofOptions {
+        timeout: Duration::from_millis(1),
+    };
+
+    let result = prove(&sequent, options);
+
+    assert_eq!(result.status, ProofStatus::Timeout);
 }
 
 #[test]
@@ -287,7 +330,7 @@ fn prove_returns_provable_when_notr_exposes_identity() {
         ],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -303,7 +346,7 @@ fn prove_returns_provable_when_notl_exposes_identity() {
         right: vec![],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
@@ -316,8 +359,8 @@ fn prove_does_not_mutate_the_borrowed_sequent() {
     };
     let before = sequent.clone();
 
-    let first = prove(&sequent);
-    let second = prove(&sequent);
+    let first = prove(&sequent, default_options());
+    let second = prove(&sequent, default_options());
 
     assert_eq!(first.status, ProofStatus::NotProvable);
     assert_eq!(second.status, ProofStatus::NotProvable);
@@ -336,7 +379,7 @@ fof(conj_1,conjecture,r).
     .expect("problem should parse");
     let sequent = Sequent::from_parsed_problem(parsed).expect("sequent should build");
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -352,7 +395,7 @@ fof(conj_1,conjecture,r).
     .expect("problem should parse");
     let sequent = Sequent::from_parsed_problem(parsed).expect("sequent should build");
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }
@@ -366,7 +409,7 @@ fn proves_identity_sequent() {
         right: vec![p],
     };
 
-    let result = prove(&sequent);
+    let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
 }
