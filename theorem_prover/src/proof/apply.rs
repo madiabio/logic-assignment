@@ -18,6 +18,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::AndL => apply_and_l(sequent, rule_match.index),
         Rule::OrR => apply_or_r(sequent, rule_match.index),
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
+        Rule::NotL => apply_not_l(sequent, rule_match.index),
         Rule::NotR => apply_not_r(sequent, rule_match.index),
 
         _ => RuleApplication::NotImplemented,
@@ -97,6 +98,23 @@ fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
     right.extend(sequent.right[..index].iter().cloned());
     right.push((**right_formula).clone());
     right.extend(sequent.right[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent { left, right }])
+}
+
+fn apply_not_l(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Not(inner)) = sequent.left.get(index) else {
+        return RuleApplication::NotImplemented;
+    };
+
+    let mut left = Vec::with_capacity(sequent.left.len().saturating_sub(1));
+    left.extend(sequent.left[..index].iter().cloned());
+    left.extend(sequent.left[index + 1..].iter().cloned());
+
+    let mut right = Vec::with_capacity(sequent.right.len() + 1);
+    right.extend(sequent.right.iter().cloned());
+    // Gamma, ~A |- Delta becomes Gamma |- Delta, A.
+    right.push((**inner).clone());
 
     RuleApplication::Premises(vec![Sequent { left, right }])
 }
