@@ -26,6 +26,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::NotL => apply_not_l(sequent, rule_match.index),
         Rule::NotR => apply_not_r(sequent, rule_match.index),
         Rule::ForAllR => apply_forall_r(sequent, rule_match.index),
+        Rule::ExistsL => apply_exists_l(sequent, rule_match.index),
 
         // These are branch closing, and create new branch
         Rule::AndR => apply_and_r(sequent, rule_match.index),
@@ -259,16 +260,13 @@ fn apply_forall_r(sequent: &Sequent, index: usize) -> RuleApplication {
         return RuleApplication::Error;
     };
 
-    let Some((first_var, remaining_vars)) = vars.split_first() else {
+    let Some(replacement_formula) = instantiate_quantified_formula(
+        vars,
+        body,
+        fresh_eigenconstant_name(sequent),
+        Formula::ForAll,
+    ) else {
         return RuleApplication::Error;
-    };
-
-    let replacement = Term::Const(Symbol::User(fresh_eigenconstant_name(sequent)));
-    let instantiated_body = body.substitute_var(&first_var.name, &replacement);
-    let replacement_formula = if remaining_vars.is_empty() {
-        instantiated_body
-    } else {
-        Formula::ForAll(remaining_vars.to_vec(), Box::new(instantiated_body))
     };
 
     let mut right = Vec::with_capacity(sequent.right.len());
@@ -280,6 +278,48 @@ fn apply_forall_r(sequent: &Sequent, index: usize) -> RuleApplication {
         left: sequent.left.clone(),
         right,
     }])
+}
+
+fn apply_exists_l(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Exists(vars, body)) = sequent.left.get(index) else {
+        return RuleApplication::Error;
+    };
+
+    let Some(replacement_formula) = instantiate_quantified_formula(
+        vars,
+        body,
+        fresh_eigenconstant_name(sequent),
+        Formula::Exists,
+    ) else {
+        return RuleApplication::Error;
+    };
+
+    let mut left = Vec::with_capacity(sequent.left.len());
+    left.extend(sequent.left[..index].iter().cloned());
+    left.push(replacement_formula);
+    left.extend(sequent.left[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent {
+        left,
+        right: sequent.right.clone(),
+    }])
+}
+
+fn instantiate_quantified_formula(
+    vars: &[crate::ast::Var],
+    body: &Formula,
+    replacement_name: String,
+    wrap_remaining: fn(Vec<crate::ast::Var>, Box<Formula>) -> Formula,
+) -> Option<Formula> {
+    let (first_var, remaining_vars) = vars.split_first()?;
+    let replacement = Term::Const(Symbol::User(replacement_name));
+    let instantiated_body = body.substitute_var(&first_var.name, &replacement);
+
+    Some(if remaining_vars.is_empty() {
+        instantiated_body
+    } else {
+        wrap_remaining(remaining_vars.to_vec(), Box::new(instantiated_body))
+    })
 }
 
 fn fresh_eigenconstant_name(sequent: &Sequent) -> String {

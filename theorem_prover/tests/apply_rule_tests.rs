@@ -643,3 +643,76 @@ fn apply_rule_instantiates_forall_right_with_fresh_eigenconstant() {
         }])
     );
 }
+
+#[test]
+fn apply_rule_instantiates_exists_left_with_fresh_eigenconstant() {
+    let sequent = Sequent {
+        left: vec![
+            predicate_formula("before"),
+            Formula::Exists(
+                vec![var("X")],
+                Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+            ),
+            predicate_formula_with_args("after", vec![constant("b")]),
+        ],
+        right: vec![predicate_formula_with_args("goal", vec![constant("a")])],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ExistsL,
+            side: Side::Left,
+            index: 1,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![
+                predicate_formula("before"),
+                predicate_formula_with_args("p", vec![constant("c")]),
+                predicate_formula_with_args("after", vec![constant("b")]),
+            ],
+            right: vec![predicate_formula_with_args("goal", vec![constant("a")])],
+        }])
+    );
+}
+
+#[test]
+fn apply_rule_reduces_exists_left_one_variable_at_a_time() {
+    let sequent = Sequent {
+        left: vec![Formula::Exists(
+            vec![var("X"), var("Y")],
+            Box::new(predicate_formula_with_args(
+                "p",
+                vec![variable("X"), variable("Y")],
+            )),
+        )],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ExistsL,
+            side: Side::Left,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![Formula::Exists(
+                vec![var("Y")],
+                Box::new(predicate_formula_with_args(
+                    "p",
+                    vec![constant("a"), variable("Y")],
+                )),
+            )],
+            right: vec![predicate_formula("goal")],
+        }])
+    );
+}
