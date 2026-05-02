@@ -306,6 +306,60 @@ fn apply_rule_moves_implication_antecedent_left_and_consequent_right() {
 }
 
 #[test]
+fn apply_rule_moves_negated_formula_from_right_to_left() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("q")],
+        right: vec![Formula::Not(Box::new(predicate_formula("p")))],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::NotR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula("q"), predicate_formula("p")],
+            right: vec![],
+        }])
+    );
+}
+
+#[test]
+fn apply_rule_preserves_other_right_formulas_when_applying_notr() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("left")],
+        right: vec![
+            predicate_formula("before"),
+            Formula::Not(Box::new(predicate_formula("p"))),
+            predicate_formula("after"),
+        ],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::NotR,
+            side: Side::Right,
+            index: 1,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula("left"), predicate_formula("p")],
+            right: vec![predicate_formula("before"), predicate_formula("after")],
+        }])
+    );
+}
+
+#[test]
 fn prove_returns_not_provable_after_applying_implies_right_rule() {
     let sequent = Sequent {
         left: vec![predicate_formula("q")],
@@ -328,6 +382,21 @@ fn prove_returns_provable_when_impliesr_exposes_identity() {
             Box::new(predicate_formula("p")),
             Box::new(predicate_formula("q")),
         )],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn prove_returns_provable_when_notr_exposes_identity() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("q")],
+        right: vec![
+            Formula::Not(Box::new(predicate_formula("p"))),
+            predicate_formula("p"),
+        ],
     };
 
     let result = prove(&sequent);

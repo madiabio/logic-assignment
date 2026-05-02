@@ -18,12 +18,14 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::AndL => apply_and_l(sequent, rule_match.index),
         Rule::OrR => apply_or_r(sequent, rule_match.index),
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
+        Rule::NotR => apply_not_r(sequent, rule_match.index),
 
         _ => RuleApplication::NotImplemented,
     }
 }
 
 fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
+    // TODO: Check the NotImplemented stuff, it probs shouldnt be returning NotImplemented
     let Some(Formula::And(items)) = sequent.left.get(index) else {
         return RuleApplication::NotImplemented;
     };
@@ -89,6 +91,22 @@ fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let mut right = Vec::with_capacity(sequent.right.len());
     right.extend(sequent.right[..index].iter().cloned());
     right.push((**right_formula).clone());
+    right.extend(sequent.right[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent { left, right }])
+}
+
+fn apply_not_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Not(inner)) = sequent.right.get(index) else {
+        return RuleApplication::NotImplemented;
+    };
+
+    let mut left = Vec::with_capacity(sequent.left.len() + 1);
+    left.extend(sequent.left.iter().cloned());
+    left.push((**inner).clone());
+
+    let mut right = Vec::with_capacity(sequent.right.len().saturating_sub(1));
+    right.extend(sequent.right[..index].iter().cloned());
     right.extend(sequent.right[index + 1..].iter().cloned());
 
     RuleApplication::Premises(vec![Sequent { left, right }])

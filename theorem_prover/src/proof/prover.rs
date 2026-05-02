@@ -36,8 +36,11 @@ fn backwards_search(sequent: &Sequent, saw_not_implemented: &mut bool) -> bool {
     find_applicable_rules(sequent)
         .iter()
         .any(|rule_match| match apply_rule(sequent, rule_match) {
+            // if its closed, return true
             RuleApplication::Closed => true,
 
+            // if apply_rule for that rule isnt implemented for that rule yet just return not
+            // implemented state, and return false.
             RuleApplication::NotImplemented => {
                 *saw_not_implemented = true;
                 warn!("Not implemented rule: {:?}", rule_match);
