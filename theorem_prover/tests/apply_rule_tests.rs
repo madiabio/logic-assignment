@@ -413,6 +413,76 @@ fn apply_rule_moves_implication_antecedent_left_and_consequent_right() {
 }
 
 #[test]
+fn apply_rule_branches_left_implication_into_two_premises() {
+    let sequent = Sequent {
+        left: vec![Formula::implies(predicate_formula("p"), predicate_formula("q"))],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ImpliesL,
+            side: Side::Left,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![],
+                right: vec![predicate_formula("goal"), predicate_formula("p")],
+            },
+            Sequent {
+                left: vec![predicate_formula("q")],
+                right: vec![predicate_formula("goal")],
+            },
+        ])
+    );
+}
+
+#[test]
+fn apply_rule_preserves_other_left_formulas_when_applying_impliesl() {
+    let sequent = Sequent {
+        left: vec![
+            predicate_formula("before"),
+            Formula::implies(predicate_formula("p"), predicate_formula("q")),
+            predicate_formula("after"),
+        ],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ImpliesL,
+            side: Side::Left,
+            index: 1,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![
+            Sequent {
+                left: vec![predicate_formula("before"), predicate_formula("after")],
+                right: vec![predicate_formula("goal"), predicate_formula("p")],
+            },
+            Sequent {
+                left: vec![
+                    predicate_formula("before"),
+                    predicate_formula("after"),
+                    predicate_formula("q"),
+                ],
+                right: vec![predicate_formula("goal")],
+            },
+        ])
+    );
+}
+
+#[test]
 fn apply_rule_moves_negated_formula_from_right_to_left() {
     let sequent = Sequent {
         left: vec![predicate_formula("q")],

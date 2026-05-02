@@ -22,6 +22,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::AndR => apply_and_r(sequent, rule_match.index),
         Rule::OrL => apply_or_l(sequent, rule_match.index),
         Rule::OrR => apply_or_r(sequent, rule_match.index),
+        Rule::ImpliesL => apply_implies_l(sequent, rule_match.index),
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
         Rule::NotL => apply_not_l(sequent, rule_match.index),
         Rule::NotR => apply_not_r(sequent, rule_match.index),
@@ -181,6 +182,37 @@ fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
     right.extend(sequent.right[index + 1..].iter().cloned());
 
     RuleApplication::Premises(vec![Sequent { left, right }])
+}
+
+fn apply_implies_l(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Implies(left_formula, right_formula)) = sequent.left.get(index) else {
+        return RuleApplication::Error;
+    };
+
+    let mut left_without_implication = Vec::with_capacity(sequent.left.len().saturating_sub(1));
+    left_without_implication.extend(sequent.left[..index].iter().cloned());
+    left_without_implication.extend(sequent.left[index + 1..].iter().cloned());
+
+    let mut first_right = Vec::with_capacity(sequent.right.len() + 1);
+    first_right.extend(sequent.right.iter().cloned());
+    // Gamma, A -> B |- Delta becomes Gamma |- Delta, A.
+    first_right.push((**left_formula).clone());
+
+    let mut second_left = Vec::with_capacity(left_without_implication.len() + 1);
+    second_left.extend(left_without_implication.iter().cloned());
+    // The second branch keeps Gamma and adds the consequent B on the left.
+    second_left.push((**right_formula).clone());
+
+    RuleApplication::Premises(vec![
+        Sequent {
+            left: left_without_implication,
+            right: first_right,
+        },
+        Sequent {
+            left: second_left,
+            right: sequent.right.clone(),
+        },
+    ])
 }
 
 fn apply_not_l(sequent: &Sequent, index: usize) -> RuleApplication {

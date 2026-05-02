@@ -251,6 +251,33 @@ fn prove_returns_provable_when_impliesr_exposes_identity() {
 }
 
 #[test]
+fn prove_returns_provable_for_modus_ponens_shape_via_impliesl() {
+    let sequent = Sequent {
+        left: vec![
+            Formula::implies(predicate_formula("p"), predicate_formula("q")),
+            predicate_formula("p"),
+        ],
+        right: vec![predicate_formula("q")],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn prove_returns_not_provable_when_impliesl_leaves_an_open_branch() {
+    let sequent = Sequent {
+        left: vec![Formula::implies(predicate_formula("p"), predicate_formula("q"))],
+        right: vec![predicate_formula("q")],
+    };
+
+    let result = prove(&sequent);
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
 fn prove_returns_provable_when_notr_exposes_identity() {
     let sequent = Sequent {
         left: vec![predicate_formula("q")],
