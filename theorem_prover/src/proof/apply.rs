@@ -1,5 +1,7 @@
 // Implements the logic to apply a rule on a sequent.
-use crate::ast::Formula;
+use std::collections::BTreeSet;
+
+use crate::ast::{Atom, Formula, Symbol, Term};
 use crate::proof::rules::Rule;
 use crate::proof::rules::RuleMatch;
 use crate::proof::sequent::Sequent;
@@ -23,6 +25,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
         Rule::NotL => apply_not_l(sequent, rule_match.index),
         Rule::NotR => apply_not_r(sequent, rule_match.index),
+        Rule::ForAllR => apply_forall_r(sequent, rule_match.index),
 
         // These are branch closing, and create new branch
         Rule::AndR => apply_and_r(sequent, rule_match.index),
@@ -249,4 +252,114 @@ fn apply_not_r(sequent: &Sequent, index: usize) -> RuleApplication {
     right.extend(sequent.right[index + 1..].iter().cloned());
 
     RuleApplication::Premises(vec![Sequent { left, right }])
+}
+
+fn apply_forall_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::ForAll(vars, body)) = sequent.right.get(index) else {
+        return RuleApplication::Error;
+    };
+
+    let Some((first_var, remaining_vars)) = vars.split_first() else {
+        return RuleApplication::Error;
+    };
+
+    let replacement = Term::Const(Symbol::User(fresh_eigenconstant_name(sequent)));
+    let instantiated_body = body.substitute_var(&first_var.name, &replacement);
+    let replacement_formula = if remaining_vars.is_empty() {
+        instantiated_body
+    } else {
+        Formula::ForAll(remaining_vars.to_vec(), Box::new(instantiated_body))
+    };
+
+    let mut right = Vec::with_capacity(sequent.right.len());
+    right.extend(sequent.right[..index].iter().cloned());
+    right.push(replacement_formula);
+    right.extend(sequent.right[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent {
+        left: sequent.left.clone(),
+        right,
+    }])
+}
+
+fn fresh_eigenconstant_name(sequent: &Sequent) -> String {
+    let mut used = BTreeSet::new();
+    for formula in &sequent.left {
+        collect_formula_symbols(formula, &mut used);
+    }
+    for formula in &sequent.right {
+        collect_formula_symbols(formula, &mut used);
+    }
+
+    for suffix in 0.. {
+        for letter in b'a'..=b'z' {
+            let mut candidate = String::from(char::from(letter));
+            if suffix > 0 {
+                candidate.push_str(&suffix.to_string());
+            }
+            if !used.contains(&candidate) {
+                return candidate;
+            }
+        }
+    }
+
+    unreachable!("fresh eigenconstant generation should always find a name")
+}
+
+fn collect_formula_symbols(formula: &Formula, used: &mut BTreeSet<String>) {
+    match formula {
+        Formula::True | Formula::False => {}
+        Formula::Atom(atom) => collect_atom_symbols(atom, used),
+        Formula::Not(inner) => collect_formula_symbols(inner, used),
+        Formula::And(items) | Formula::Or(items) => {
+            for item in items {
+                collect_formula_symbols(item, used);
+            }
+        }
+        Formula::Implies(left, right) => {
+            collect_formula_symbols(left, used);
+            collect_formula_symbols(right, used);
+        }
+        Formula::ForAll(vars, body) | Formula::Exists(vars, body) => {
+            for var in vars {
+                used.insert(var.name.clone());
+            }
+            collect_formula_symbols(body, used);
+        }
+    }
+}
+
+fn collect_atom_symbols(atom: &Atom, used: &mut BTreeSet<String>) {
+    match atom {
+        Atom::Predicate { name, args } => {
+            collect_symbol(name, used);
+            for arg in args {
+                collect_term_symbols(arg, used);
+            }
+        }
+    }
+}
+
+fn collect_term_symbols(term: &Term, used: &mut BTreeSet<String>) {
+    match term {
+        Term::Var(var) => {
+            used.insert(var.name.clone());
+        }
+        Term::Const(symbol) => collect_symbol(symbol, used),
+        Term::Fun { name, args } => {
+            collect_symbol(name, used);
+            for arg in args {
+                collect_term_symbols(arg, used);
+            }
+        }
+        Term::Number(_) | Term::DistinctObject(_) => {}
+    }
+}
+
+fn collect_symbol(symbol: &Symbol, used: &mut BTreeSet<String>) {
+    match symbol {
+        Symbol::User(value) | Symbol::Defined(value) | Symbol::System(value) => {
+            used.insert(value.clone());
+        }
+    }
 }

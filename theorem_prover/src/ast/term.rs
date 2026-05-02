@@ -74,3 +74,20 @@ impl fmt::Display for Term {
         }
     }
 }
+
+impl Term {
+    pub fn substitute_var(&self, variable_name: &str, replacement: &Term) -> Self {
+        match self {
+            Term::Var(var) if var.name == variable_name => replacement.clone(),
+            Term::Var(_) => self.clone(),
+            Term::Const(_) | Term::Number(_) | Term::DistinctObject(_) => self.clone(),
+            Term::Fun { name, args } => Term::Fun {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| arg.substitute_var(variable_name, replacement))
+                    .collect(),
+            },
+        }
+    }
+}

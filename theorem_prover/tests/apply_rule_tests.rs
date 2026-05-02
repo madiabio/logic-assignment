@@ -1,5 +1,5 @@
 use theorem_prover::Sequent;
-use theorem_prover::ast::Formula;
+use theorem_prover::ast::{Formula, Symbol, Term, Var};
 use theorem_prover::proof::apply::{RuleApplication, apply_rule};
 use theorem_prover::proof::rules::{Rule, RuleMatch, Side};
 
@@ -35,6 +35,24 @@ fn apply_rule_with_optional_trace(sequent: &Sequent, rule_match: RuleMatch) -> R
 
 fn predicate_formula(name: &str) -> Formula {
     Formula::atom(name)
+}
+
+fn var(name: &str) -> Var {
+    Var {
+        name: name.to_owned(),
+    }
+}
+
+fn variable(name: &str) -> Term {
+    Term::Var(var(name))
+}
+
+fn constant(name: &str) -> Term {
+    Term::Const(Symbol::User(name.to_owned()))
+}
+
+fn predicate_formula_with_args(name: &str, args: Vec<Term>) -> Formula {
+    Formula::predicate(name, args)
 }
 
 #[test]
@@ -586,6 +604,42 @@ fn apply_rule_preserves_other_left_formulas_when_applying_notl() {
         RuleApplication::Premises(vec![Sequent {
             left: vec![predicate_formula("before"), predicate_formula("after")],
             right: vec![predicate_formula("goal"), predicate_formula("p")],
+        }])
+    );
+}
+
+#[test]
+fn apply_rule_instantiates_forall_right_with_fresh_eigenconstant() {
+    let sequent = Sequent {
+        left: vec![predicate_formula_with_args("left", vec![constant("a")])],
+        right: vec![
+            predicate_formula("before"),
+            Formula::ForAll(
+                vec![var("X")],
+                Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+            ),
+            predicate_formula_with_args("after", vec![constant("b")]),
+        ],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ForAllR,
+            side: Side::Right,
+            index: 1,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula_with_args("left", vec![constant("a")])],
+            right: vec![
+                predicate_formula("before"),
+                predicate_formula_with_args("p", vec![constant("c")]),
+                predicate_formula_with_args("after", vec![constant("b")]),
+            ],
         }])
     );
 }

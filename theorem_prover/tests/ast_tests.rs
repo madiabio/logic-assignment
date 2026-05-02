@@ -247,3 +247,59 @@ fn formulas_parenthesize_ambiguous_binary_nesting() {
         "p ⇒ q ⇒ r"
     );
 }
+
+#[test]
+fn term_substitution_replaces_variables_inside_nested_function_arguments() {
+    let term = Term::Fun {
+        name: Symbol::User("f".to_owned()),
+        args: vec![
+            variable("X"),
+            Term::Fun {
+                name: Symbol::User("g".to_owned()),
+                args: vec![variable("X"), constant("a")],
+            },
+        ],
+    };
+
+    assert_eq!(
+        term.substitute_var("X", &constant("b")),
+        Term::Fun {
+            name: Symbol::User("f".to_owned()),
+            args: vec![
+                constant("b"),
+                Term::Fun {
+                    name: Symbol::User("g".to_owned()),
+                    args: vec![constant("b"), constant("a")],
+                },
+            ],
+        }
+    );
+}
+
+#[test]
+fn formula_substitution_stops_at_shadowing_quantifier() {
+    let formula = Formula::ForAll(
+        vec![var("X")],
+        Box::new(Formula::and(vec![
+            Formula::predicate("p", vec![variable("X")]),
+            Formula::Exists(
+                vec![var("X")],
+                Box::new(Formula::predicate("q", vec![variable("X")])),
+            ),
+        ])),
+    );
+
+    assert_eq!(
+        formula.substitute_var("X", &constant("a")),
+        Formula::ForAll(
+            vec![var("X")],
+            Box::new(Formula::and(vec![
+                Formula::predicate("p", vec![variable("X")]),
+                Formula::Exists(
+                    vec![var("X")],
+                    Box::new(Formula::predicate("q", vec![variable("X")])),
+                ),
+            ]))
+        )
+    );
+}

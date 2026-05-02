@@ -147,6 +147,58 @@ impl Formula {
             Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _)
         )
     }
+
+    pub fn substitute_var(&self, variable_name: &str, replacement: &Term) -> Self {
+        match self {
+            Formula::True | Formula::False => self.clone(),
+            Formula::Atom(Atom::Predicate { name, args }) => Formula::Atom(Atom::Predicate {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| arg.substitute_var(variable_name, replacement))
+                    .collect(),
+            }),
+            Formula::Not(inner) => Formula::Not(Box::new(
+                inner.substitute_var(variable_name, replacement),
+            )),
+            Formula::And(items) => Formula::And(
+                items
+                    .iter()
+                    .map(|item| item.substitute_var(variable_name, replacement))
+                    .collect(),
+            ),
+            Formula::Or(items) => Formula::Or(
+                items
+                    .iter()
+                    .map(|item| item.substitute_var(variable_name, replacement))
+                    .collect(),
+            ),
+            Formula::Implies(left, right) => Formula::Implies(
+                Box::new(left.substitute_var(variable_name, replacement)),
+                Box::new(right.substitute_var(variable_name, replacement)),
+            ),
+            Formula::ForAll(vars, body) => {
+                if vars.iter().any(|var| var.name == variable_name) {
+                    self.clone()
+                } else {
+                    Formula::ForAll(
+                        vars.clone(),
+                        Box::new(body.substitute_var(variable_name, replacement)),
+                    )
+                }
+            }
+            Formula::Exists(vars, body) => {
+                if vars.iter().any(|var| var.name == variable_name) {
+                    self.clone()
+                } else {
+                    Formula::Exists(
+                        vars.clone(),
+                        Box::new(body.substitute_var(variable_name, replacement)),
+                    )
+                }
+            }
+        }
+    }
 }
 
 impl fmt::Display for Atom {
