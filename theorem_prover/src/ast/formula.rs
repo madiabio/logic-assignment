@@ -21,6 +21,33 @@ pub enum Atom {
 use crate::ast::term::{Symbol, Term, Var};
 
 impl Formula {
+    pub fn atom(name: &str) -> Self {
+        Self::predicate(name, Vec::new())
+    }
+
+    pub fn predicate(name: &str, args: Vec<Term>) -> Self {
+        Self::Atom(Atom::Predicate {
+            name: Symbol::User(name.to_owned()),
+            args,
+        })
+    }
+
+    pub fn not(inner: Formula) -> Self {
+        Self::Not(Box::new(inner))
+    }
+
+    pub fn and(items: Vec<Formula>) -> Self {
+        Self::And(items)
+    }
+
+    pub fn or(items: Vec<Formula>) -> Self {
+        Self::Or(items)
+    }
+
+    pub fn implies(left: Formula, right: Formula) -> Self {
+        Self::Implies(Box::new(left), Box::new(right))
+    }
+
     fn precedence(&self) -> u8 {
         match self {
             Formula::True | Formula::False | Formula::Atom(_) => 3,

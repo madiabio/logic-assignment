@@ -1,13 +1,6 @@
 use theorem_prover::Sequent;
-use theorem_prover::ast::{Atom, Formula, Symbol, Var};
+use theorem_prover::ast::{Formula, Var};
 use theorem_prover::proof::rules::{Rule, RuleMatch, Side, find_applicable_rules};
-
-fn atom(name: &str) -> Formula {
-    Formula::Atom(Atom::Predicate {
-        name: Symbol::User(name.to_owned()),
-        args: vec![],
-    })
-}
 
 fn var(name: &str) -> Var {
     Var {
@@ -25,7 +18,7 @@ fn exists(name: &str, body: Formula) -> Formula {
 
 #[test]
 fn finds_identity_rule_for_matching_formula_on_both_sides() {
-    let formula = atom("p");
+    let formula = Formula::atom("p");
     let sequent = Sequent {
         left: vec![formula.clone()],
         right: vec![formula],
@@ -43,8 +36,8 @@ fn finds_identity_rule_for_matching_formula_on_both_sides() {
 
 #[test]
 fn finds_identity_rule_for_each_matching_left_formula() {
-    let p = atom("p");
-    let q = atom("q");
+    let p = Formula::atom("p");
+    let q = Formula::atom("q");
     let sequent = Sequent {
         left: vec![p.clone(), q.clone(), p.clone()],
         right: vec![q, p],
@@ -75,7 +68,7 @@ fn finds_identity_rule_for_each_matching_left_formula() {
 #[test]
 fn finds_top_right_rule() {
     let sequent = Sequent {
-        left: vec![atom("p")],
+        left: vec![Formula::atom("p")],
         right: vec![Formula::True],
     };
 
@@ -93,7 +86,7 @@ fn finds_top_right_rule() {
 fn finds_bottom_left_rule() {
     let sequent = Sequent {
         left: vec![Formula::False],
-        right: vec![atom("p")],
+        right: vec![Formula::atom("p")],
     };
 
     assert_eq!(
@@ -109,8 +102,8 @@ fn finds_bottom_left_rule() {
 #[test]
 fn finds_forall_left_rule() {
     let sequent = Sequent {
-        left: vec![forall("X", atom("p"))],
-        right: vec![atom("q")],
+        left: vec![forall("X", Formula::atom("p"))],
+        right: vec![Formula::atom("q")],
     };
 
     assert_eq!(
@@ -126,8 +119,8 @@ fn finds_forall_left_rule() {
 #[test]
 fn finds_forall_right_rule() {
     let sequent = Sequent {
-        left: vec![atom("p")],
-        right: vec![forall("X", atom("q"))],
+        left: vec![Formula::atom("p")],
+        right: vec![forall("X", Formula::atom("q"))],
     };
 
     assert_eq!(
@@ -143,8 +136,8 @@ fn finds_forall_right_rule() {
 #[test]
 fn finds_exists_left_rule() {
     let sequent = Sequent {
-        left: vec![exists("X", atom("p"))],
-        right: vec![atom("q")],
+        left: vec![exists("X", Formula::atom("p"))],
+        right: vec![Formula::atom("q")],
     };
 
     assert_eq!(
@@ -160,8 +153,8 @@ fn finds_exists_left_rule() {
 #[test]
 fn finds_exists_right_rule() {
     let sequent = Sequent {
-        left: vec![atom("p")],
-        right: vec![exists("X", atom("q"))],
+        left: vec![Formula::atom("p")],
+        right: vec![exists("X", Formula::atom("q"))],
     };
 
     assert_eq!(
@@ -178,15 +171,15 @@ fn finds_exists_right_rule() {
 fn finds_multiple_quantifier_matches_with_distinct_indices() {
     let sequent = Sequent {
         left: vec![
-            forall("X", atom("p")),
-            atom("q"),
-            forall("Y", atom("r")),
-            forall("Z", atom("s")),
+            forall("X", Formula::atom("p")),
+            Formula::atom("q"),
+            forall("Y", Formula::atom("r")),
+            forall("Z", Formula::atom("s")),
         ],
         right: vec![
-            atom("t"),
-            exists("A", atom("u")),
-            exists("B", atom("v")),
+            Formula::atom("t"),
+            exists("A", Formula::atom("u")),
+            exists("B", Formula::atom("v")),
         ],
     };
 
@@ -225,8 +218,8 @@ fn finds_multiple_quantifier_matches_with_distinct_indices() {
 #[test]
 fn returns_no_matches_for_simple_non_matching_sequent() {
     let sequent = Sequent {
-        left: vec![atom("p")],
-        right: vec![atom("q")],
+        left: vec![Formula::atom("p")],
+        right: vec![Formula::atom("q")],
     };
 
     assert!(find_applicable_rules(&sequent).is_empty());
@@ -236,23 +229,23 @@ fn returns_no_matches_for_simple_non_matching_sequent() {
 fn recognizes_connective_rules_on_both_sides_in_deterministic_order() {
     let sequent = Sequent {
         left: vec![
-            atom("p"),
-            Formula::And(vec![atom("a"), atom("b")]),
-            Formula::Or(vec![atom("c"), atom("d")]),
-            Formula::Implies(Box::new(atom("e")), Box::new(atom("f"))),
-            Formula::Not(Box::new(atom("g"))),
-            forall("X", atom("h")),
-            exists("Y", atom("i")),
+            Formula::atom("p"),
+            Formula::And(vec![Formula::atom("a"), Formula::atom("b")]),
+            Formula::Or(vec![Formula::atom("c"), Formula::atom("d")]),
+            Formula::Implies(Box::new(Formula::atom("e")), Box::new(Formula::atom("f"))),
+            Formula::Not(Box::new(Formula::atom("g"))),
+            forall("X", Formula::atom("h")),
+            exists("Y", Formula::atom("i")),
         ],
         right: vec![
-            atom("p"),
+            Formula::atom("p"),
             Formula::True,
-            Formula::And(vec![atom("j"), atom("k")]),
-            Formula::Or(vec![atom("l"), atom("m")]),
-            Formula::Implies(Box::new(atom("n")), Box::new(atom("o"))),
-            Formula::Not(Box::new(atom("q"))),
-            forall("Z", atom("r")),
-            exists("W", atom("s")),
+            Formula::And(vec![Formula::atom("j"), Formula::atom("k")]),
+            Formula::Or(vec![Formula::atom("l"), Formula::atom("m")]),
+            Formula::Implies(Box::new(Formula::atom("n")), Box::new(Formula::atom("o"))),
+            Formula::Not(Box::new(Formula::atom("q"))),
+            forall("Z", Formula::atom("r")),
+            exists("W", Formula::atom("s")),
         ],
     };
 
@@ -336,8 +329,8 @@ fn recognizes_connective_rules_on_both_sides_in_deterministic_order() {
 #[test]
 fn matcher_does_not_mutate_the_borrowed_sequent() {
     let sequent = Sequent {
-        left: vec![Formula::And(vec![atom("p"), atom("q")])],
-        right: vec![Formula::Not(Box::new(atom("r")))],
+        left: vec![Formula::And(vec![Formula::atom("p"), Formula::atom("q")])],
+        right: vec![Formula::Not(Box::new(Formula::atom("r")))],
     };
     let snapshot = sequent.clone();
 
