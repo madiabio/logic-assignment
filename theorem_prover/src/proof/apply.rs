@@ -37,6 +37,8 @@ fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let mut left = Vec::with_capacity(sequent.left.len() + 1);
     left.extend(sequent.left[..index].iter().cloned());
 
+    // This prover keeps conjunctions in a binary step form, so an n-ary
+    // conjunction is peeled from the front and the remainder stays grouped.
     left.push(items[0].clone());
     if items.len() == 2 {
         left.push(items[1].clone());
@@ -64,6 +66,8 @@ fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let mut right = Vec::with_capacity(sequent.right.len() + 1);
     right.extend(sequent.right[..index].iter().cloned());
 
+    // Mirror AndL on the right: split off one disjunct and keep the tail as a
+    // single formula so repeated rule applications continue reducing it.
     right.push(items[0].clone());
     if items.len() == 2 {
         right.push(items[1].clone());
@@ -86,6 +90,7 @@ fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
 
     let mut left = Vec::with_capacity(sequent.left.len() + 1);
     left.extend(sequent.left.iter().cloned());
+    // Gamma |- A -> B becomes Gamma, A |- B.
     left.push((**left_formula).clone());
 
     let mut right = Vec::with_capacity(sequent.right.len());
@@ -103,6 +108,7 @@ fn apply_not_r(sequent: &Sequent, index: usize) -> RuleApplication {
 
     let mut left = Vec::with_capacity(sequent.left.len() + 1);
     left.extend(sequent.left.iter().cloned());
+    // Gamma |- ~A becomes Gamma, A |- by moving the negated formula left.
     left.push((**inner).clone());
 
     let mut right = Vec::with_capacity(sequent.right.len().saturating_sub(1));
