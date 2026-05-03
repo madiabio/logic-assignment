@@ -716,3 +716,89 @@ fn apply_rule_reduces_exists_left_one_variable_at_a_time() {
         }])
     );
 }
+
+#[test]
+fn apply_rule_adds_exists_right_instantiation_while_preserving_quantifier() {
+    let sequent = Sequent {
+        left: vec![predicate_formula_with_args("left", vec![constant("a")])],
+        right: vec![
+            predicate_formula("before"),
+            Formula::Exists(
+                vec![var("X")],
+                Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+            ),
+            predicate_formula_with_args("after", vec![constant("b")]),
+        ],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ExistsR,
+            side: Side::Right,
+            index: 1,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula_with_args("left", vec![constant("a")])],
+            right: vec![
+                predicate_formula("before"),
+                Formula::Exists(
+                    vec![var("X")],
+                    Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+                ),
+                predicate_formula_with_args("p", vec![constant("c")]),
+                predicate_formula_with_args("after", vec![constant("b")]),
+            ],
+        }])
+    );
+}
+
+#[test]
+fn apply_rule_adds_exists_right_instantiation_one_variable_at_a_time() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("source")],
+        right: vec![Formula::Exists(
+            vec![var("X"), var("Y")],
+            Box::new(predicate_formula_with_args(
+                "p",
+                vec![variable("X"), variable("Y")],
+            )),
+        )],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ExistsR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula("source")],
+            right: vec![
+                Formula::Exists(
+                    vec![var("X"), var("Y")],
+                    Box::new(predicate_formula_with_args(
+                        "p",
+                        vec![variable("X"), variable("Y")],
+                    )),
+                ),
+                Formula::Exists(
+                    vec![var("Y")],
+                    Box::new(predicate_formula_with_args(
+                        "p",
+                        vec![constant("a"), variable("Y")],
+                    )),
+                ),
+            ],
+        }])
+    );
+}
