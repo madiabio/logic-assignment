@@ -1,7 +1,7 @@
 //! Scheduling policy for choosing which matched rule to try next.
 //!
-//! Use frozen baseline visible terms first, then allow exactly one fresh fallback per quantified
-//! occurrence, and never promote generated terms into the candidate pool.
+//! Reusable quantifiers prefer currently visible branch terms, then a bounded fresh fallback.
+//! Exhausting that bounded exploration leaves the branch open rather than refuted.
 
 use crate::Sequent;
 use crate::ast::Term;
