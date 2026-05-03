@@ -16,6 +16,7 @@
 //! - `cargo run -- rules problem.p`
 //! - `cargo run -- rules --show-sequent problem.p`
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use log::warn;
@@ -72,6 +73,8 @@ pub enum ProofStatus {
     Timeout,
     /// Search hit a configured depth or step bound before reaching a proof result.
     Unknown,
+    /// Search was interrupted by a cancellation request such as `Ctrl+C`.
+    Cancelled,
     /// Search encountered an unexpected rule-application failure.
     Error,
 }
@@ -89,6 +92,7 @@ enum SearchOutcome {
     NotProvable,
     Timeout,
     Unknown,
+    Cancelled,
     NotImplemented,
     Error,
 }
@@ -100,6 +104,7 @@ impl SearchOutcome {
             SearchOutcome::Provable => ProofStatus::Provable,
             SearchOutcome::Timeout => ProofStatus::Timeout,
             SearchOutcome::Unknown => ProofStatus::Unknown,
+            SearchOutcome::Cancelled => ProofStatus::Cancelled,
             SearchOutcome::NotImplemented => ProofStatus::NotImplemented,
             SearchOutcome::Error => ProofStatus::Error,
             SearchOutcome::NotProvable => ProofStatus::NotProvable,
@@ -120,8 +125,9 @@ impl SearchOutcome {
         match self {
             SearchOutcome::Provable => 5,
             SearchOutcome::Timeout => 4,
-            SearchOutcome::Unknown => 3,
-            SearchOutcome::NotImplemented => 2,
+            SearchOutcome::Cancelled => 3,
+            SearchOutcome::Unknown => 2,
+            SearchOutcome::NotImplemented => 1,
             SearchOutcome::Error => 1,
             SearchOutcome::NotProvable => 0,
         }
@@ -130,13 +136,31 @@ impl SearchOutcome {
 
 /// Attempts to prove a sequent within the configured timeout and search bounds.
 pub fn prove(sequent: &Sequent, options: ProofOptions) -> ProofResult {
+    static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
+    prove_with_cancel(sequent, options, &NEVER_CANCELLED)
+}
+
+/// Attempts to prove a sequent while observing an external cancellation flag.
+pub fn prove_with_cancel(
+    sequent: &Sequent,
+    options: ProofOptions,
+    cancel_requested: &AtomicBool,
+) -> ProofResult {
     let deadline = Instant::now() + options.timeout;
     let state = BranchState::new(visible_terms_in_sequent(sequent));
     let mut steps_taken = 0usize;
 
     ProofResult {
-        status: backwards_search(sequent, deadline, &state, &options, 0, &mut steps_taken)
-            .into_status(),
+        status: backwards_search(
+            sequent,
+            deadline,
+            &state,
+            &options,
+            cancel_requested,
+            0,
+            &mut steps_taken,
+        )
+        .into_status(),
     }
 }
 
@@ -146,9 +170,15 @@ fn backwards_search(
     deadline: Instant,
     state: &BranchState,
     options: &ProofOptions,
+    cancel_requested: &AtomicBool,
     depth: usize,
     steps_taken: &mut usize,
 ) -> SearchOutcome {
+    if cancel_requested.load(Ordering::Relaxed) {
+        warn!("Proof search cancelled.");
+        return SearchOutcome::Cancelled;
+    }
+
     if Instant::now() >= deadline {
         warn!("Proof search timed out.");
         return SearchOutcome::Timeout;
@@ -167,6 +197,11 @@ fn backwards_search(
     let mut best = SearchOutcome::NotProvable;
 
     for scheduled_rule in scheduled_rules {
+        if cancel_requested.load(Ordering::Relaxed) {
+            warn!("Proof search cancelled.");
+            return SearchOutcome::Cancelled;
+        }
+
         let mut next_state = state.clone();
         let application = match &scheduled_rule {
             ScheduledRule::Standard(rule_match) => apply_rule(sequent, rule_match),
@@ -201,6 +236,7 @@ fn backwards_search(
                 deadline,
                 &next_state,
                 options,
+                cancel_requested,
                 depth + 1,
                 steps_taken,
             ),
@@ -211,7 +247,9 @@ fn backwards_search(
         };
 
         match outcome {
-            SearchOutcome::Provable | SearchOutcome::Timeout => return outcome,
+            SearchOutcome::Provable | SearchOutcome::Timeout | SearchOutcome::Cancelled => {
+                return outcome;
+            }
             other => {
                 best = best.merge(other);
             }
@@ -227,11 +265,25 @@ fn prove_premises(
     deadline: Instant,
     state: &BranchState,
     options: &ProofOptions,
+    cancel_requested: &AtomicBool,
     depth: usize,
     steps_taken: &mut usize,
 ) -> SearchOutcome {
     for premise in premises {
-        let outcome = backwards_search(premise, deadline, state, options, depth, steps_taken);
+        if cancel_requested.load(Ordering::Relaxed) {
+            warn!("Proof search cancelled.");
+            return SearchOutcome::Cancelled;
+        }
+
+        let outcome = backwards_search(
+            premise,
+            deadline,
+            state,
+            options,
+            cancel_requested,
+            depth,
+            steps_taken,
+        );
 
         if outcome != SearchOutcome::Provable {
             return outcome;

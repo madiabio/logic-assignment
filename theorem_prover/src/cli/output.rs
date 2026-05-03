@@ -104,6 +104,7 @@ pub(crate) fn human_proof_status(status: &ProofStatus) -> &'static str {
         ProofStatus::NotProvable => "not_provable",
         ProofStatus::Timeout => "timeout",
         ProofStatus::Unknown => "unknown",
+        ProofStatus::Cancelled => "cancelled",
         ProofStatus::Error => "error",
     }
 }
@@ -148,5 +149,6 @@ mod tests {
         assert_eq!(human_proof_status(&ProofStatus::Provable), "provable");
         assert_eq!(human_proof_status(&ProofStatus::NotProvable), "not_provable");
         assert_eq!(human_proof_status(&ProofStatus::Unknown), "unknown");
+        assert_eq!(human_proof_status(&ProofStatus::Cancelled), "cancelled");
     }
 }

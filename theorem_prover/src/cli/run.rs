@@ -8,10 +8,16 @@ use crate::cli::subset::{ProblemRun, resolve_subset_targets, subset_stats_fields
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Mutex,
+};
 use std::time::Instant;
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
 use theorem_prover::{
-    ProblemPipelineError, ProofStatus, build_problem_sequent, run_problem_verbose_with_options,
+    ProblemPipelineError, ProofStatus, build_problem_sequent,
+    run_problem_verbose_with_options_and_cancel,
 };
 
 /// Outcome of running rule inspection on one file.
@@ -30,13 +36,122 @@ enum ProveFileResult {
     ProcessingFailure,
 }
 
+/// Shared cancellation state driven by the process `Ctrl+C` handler.
+#[derive(Clone)]
+struct CancellationState {
+    requested: Arc<AtomicBool>,
+    next_problem: Arc<Mutex<Option<String>>>,
+}
+
+impl CancellationState {
+    /// Installs a `Ctrl+C` handler and exposes its atomic cancellation flag.
+    fn install() -> Self {
+        let requested = Arc::new(AtomicBool::new(false));
+        let interrupt_count = Arc::new(AtomicUsize::new(0));
+        let next_problem = Arc::new(Mutex::new(None));
+        let handler_flag = Arc::clone(&requested);
+        let handler_count = Arc::clone(&interrupt_count);
+        let handler_next_problem = Arc::clone(&next_problem);
+        ctrlc::set_handler(move || {
+            let count = handler_count.fetch_add(1, Ordering::Relaxed) + 1;
+            if count == 1 {
+                handler_flag.store(true, Ordering::Relaxed);
+                eprintln!("Cancellation requested. Press Ctrl+C again to force quit.");
+            } else {
+                if let Ok(guard) = handler_next_problem.lock() {
+                    if let Some(next_problem) = &*guard {
+                        eprintln!("Next problem was: {next_problem}");
+                    }
+                }
+                eprintln!("Force quitting.");
+                std::process::exit(130);
+            }
+        })
+        .expect("failed to install Ctrl+C handler");
+        Self {
+            requested,
+            next_problem,
+        }
+    }
+
+    /// Returns whether cancellation has been requested.
+    fn is_requested(&self) -> bool {
+        self.requested.load(Ordering::Relaxed)
+    }
+
+    /// Returns the raw atomic flag for proof-engine cancellation checks.
+    fn flag(&self) -> &AtomicBool {
+        &self.requested
+    }
+
+    /// Updates the next problem that would be started if execution continues.
+    fn set_next_problem(&self, next_problem: Option<String>) {
+        if let Ok(mut guard) = self.next_problem.lock() {
+            *guard = next_problem;
+        }
+    }
+}
+
+/// Running counts and metadata for `prove` batch execution.
+#[derive(Default)]
+struct ProveBatchSummary {
+    processed: usize,
+    skipped: usize,
+    provable: usize,
+    not_provable: usize,
+    timeout: usize,
+    unknown: usize,
+    cancelled: usize,
+    not_implemented: usize,
+    error: usize,
+    failed_to_process: usize,
+    interrupted_problem: Option<String>,
+    failed_files: Vec<PathBuf>,
+}
+
+impl ProveBatchSummary {
+    /// Records the outcome of one processed problem.
+    fn record_result(&mut self, problem_run: &ProblemRun, result: &ProveFileResult) {
+        self.processed += 1;
+        match result {
+            ProveFileResult::Status(ProofStatus::Provable) => self.provable += 1,
+            ProveFileResult::Status(ProofStatus::NotProvable) => self.not_provable += 1,
+            ProveFileResult::Status(ProofStatus::Timeout) => self.timeout += 1,
+            ProveFileResult::Status(ProofStatus::Unknown) => self.unknown += 1,
+            ProveFileResult::Status(ProofStatus::Cancelled) => {
+                self.cancelled += 1;
+                self.interrupted_problem = Some(problem_run.problem_id());
+            }
+            ProveFileResult::Status(ProofStatus::NotImplemented) => self.not_implemented += 1,
+            ProveFileResult::Status(ProofStatus::Error) => self.error += 1,
+            ProveFileResult::ProcessingFailure => {
+                self.failed_to_process += 1;
+                self.failed_files.push(problem_run.path.clone());
+            }
+        }
+    }
+}
+
+/// Running counts and metadata for `rules` batch execution.
+#[derive(Default)]
+struct RulesBatchSummary {
+    processed: usize,
+    skipped: usize,
+    succeeded: usize,
+    failed: usize,
+    rule_matches: usize,
+    cancelled: bool,
+    failed_files: Vec<PathBuf>,
+}
+
 /// Dispatches the `prove` command across direct targets or configured subset
 /// runs.
 pub(crate) fn run_prover_mode(options: &ProveCommand) {
+    let cancellation = CancellationState::install();
     if let Some(target) = &options.target {
         let target = Path::new(target);
         if target.is_dir() {
-            prove_directory(target, options);
+            prove_directory(target, options, &cancellation);
         } else {
             print_prove_preamble(options.format, None);
             let result = prove_file(
@@ -45,6 +160,7 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
                     subset_stats: None,
                 },
                 options,
+                &cancellation,
                 1,
                 1,
             );
@@ -56,16 +172,17 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let config = ensure_config();
     let targets = resolve_subset_targets(&config);
     print_prove_preamble(options.format, Some(targets.len()));
-    prove_paths(&targets, options);
+    prove_paths(&targets, options, &cancellation);
 }
 
 /// Dispatches the `rules` command across direct targets or configured subset
 /// runs.
 pub(crate) fn run_rules_mode(options: &RulesCommand) {
+    let cancellation = CancellationState::install();
     if let Some(target) = &options.target {
         let target = Path::new(target);
         if target.is_dir() {
-            inspect_rules_directory(target, options);
+            inspect_rules_directory(target, options, &cancellation);
         } else {
             print_rules_preamble(options.format, None);
             let result = inspect_rules_file(
@@ -74,6 +191,7 @@ pub(crate) fn run_rules_mode(options: &RulesCommand) {
                     subset_stats: None,
                 },
                 options,
+                &cancellation,
                 1,
                 1,
             );
@@ -85,11 +203,11 @@ pub(crate) fn run_rules_mode(options: &RulesCommand) {
     let config = ensure_config();
     let targets = resolve_subset_targets(&config);
     print_rules_preamble(options.format, Some(targets.len()));
-    inspect_rules_paths(&targets, options);
+    inspect_rules_paths(&targets, options, &cancellation);
 }
 
 /// Runs the prover over every `.p` file in a directory and prints per-status totals.
-fn prove_directory(dir: &Path, options: &ProveCommand) {
+fn prove_directory(dir: &Path, options: &ProveCommand, cancellation: &CancellationState) {
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     let mut problem_runs = Vec::new();
     for entry in entries {
@@ -107,74 +225,86 @@ fn prove_directory(dir: &Path, options: &ProveCommand) {
     }
 
     print_prove_preamble(options.format, None);
-    prove_paths(&problem_runs, options);
+    prove_paths(&problem_runs, options, cancellation);
 }
 
 /// Processes many problems through the prover and emits aggregate results.
-fn prove_paths(problem_runs: &[ProblemRun], options: &ProveCommand) {
-    let mut processed = 0usize;
-    let mut skipped = 0usize;
-    let mut failed_files = Vec::new();
-    let mut provable = 0usize;
-    let mut not_provable = 0usize;
-    let mut timeout = 0usize;
-    let mut unknown = 0usize;
-    let mut not_implemented = 0usize;
-    let mut error = 0usize;
-    let mut processing_failures = 0usize;
-
+fn prove_paths(problem_runs: &[ProblemRun], options: &ProveCommand, cancellation: &CancellationState) {
+    let mut summary = ProveBatchSummary::default();
     let total = problem_runs.len();
     for (index, problem_run) in problem_runs.iter().enumerate() {
+        cancellation.set_next_problem(Some(format!(
+            "[{}/{}] {} ({})",
+            index + 1,
+            total,
+            problem_run.problem_id(),
+            problem_run.path.display()
+        )));
+        if cancellation.is_requested() {
+            break;
+        }
+
         if should_skip_parse_failed_file(&problem_run.path, options) {
-            skipped += 1;
+            summary.skipped += 1;
             continue;
         }
 
-        processed += 1;
-        match prove_file(problem_run, options, index + 1, total) {
-            ProveFileResult::Status(ProofStatus::Provable) => provable += 1,
-            ProveFileResult::Status(ProofStatus::NotProvable) => not_provable += 1,
-            ProveFileResult::Status(ProofStatus::Timeout) => timeout += 1,
-            ProveFileResult::Status(ProofStatus::Unknown) => unknown += 1,
-            ProveFileResult::Status(ProofStatus::NotImplemented) => not_implemented += 1,
-            ProveFileResult::Status(ProofStatus::Error) => error += 1,
-            ProveFileResult::ProcessingFailure => {
-                processing_failures += 1;
-                failed_files.push(problem_run.path.clone());
-            }
+        let result = prove_file(problem_run, options, cancellation, index + 1, total);
+        summary.record_result(problem_run, &result);
+
+        if matches!(result, ProveFileResult::Status(ProofStatus::Cancelled)) {
+            break;
         }
     }
+    cancellation.set_next_problem(None);
 
     match options.format {
         OutputFormat::Human => {
             print_summary_header("summary");
             print_summary_row(&[
-                ("processed", processed.to_string()),
-                ("skipped", skipped.to_string()),
-                ("provable", provable.to_string()),
-                ("not_provable", not_provable.to_string()),
-                ("timeout", timeout.to_string()),
-                ("unknown", unknown.to_string()),
-                ("not_impl", not_implemented.to_string()),
-                ("error", error.to_string()),
-                ("failed_to_process", processing_failures.to_string()),
+                ("processed", summary.processed.to_string()),
+                ("skipped", summary.skipped.to_string()),
+                ("provable", summary.provable.to_string()),
+                ("not_provable", summary.not_provable.to_string()),
+                ("timeout", summary.timeout.to_string()),
+                ("unknown", summary.unknown.to_string()),
+                ("cancelled", summary.cancelled.to_string()),
+                ("not_impl", summary.not_implemented.to_string()),
+                ("error", summary.error.to_string()),
+                ("failed_to_process", summary.failed_to_process.to_string()),
             ]);
+            if let Some(problem_id) = &summary.interrupted_problem {
+                eprintln!("Cancelled while proving {problem_id}");
+            } else if cancellation.is_requested() {
+                eprintln!("Cancelled before starting the next problem");
+            }
         }
         OutputFormat::Tsv => {
             println!(
-                "summary\t{processed}\t{skipped}\t{provable}\t{not_provable}\t{timeout}\t{unknown}\t{not_implemented}\t{error}\t{processing_failures}"
+                "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                summary.processed,
+                summary.skipped,
+                summary.provable,
+                summary.not_provable,
+                summary.timeout,
+                summary.unknown,
+                summary.cancelled,
+                summary.not_implemented,
+                summary.error,
+                summary.failed_to_process,
+                summary.interrupted_problem.unwrap_or_default()
             );
         }
     }
 
-    if options.format == OutputFormat::Human && !failed_files.is_empty() {
+    if options.format == OutputFormat::Human && !summary.failed_files.is_empty() {
         eprintln!("Failed files:");
-        for path in failed_files {
+        for path in summary.failed_files {
             eprintln!("  {}", path.display());
         }
     }
 
-    if processing_failures > 0 {
+    if summary.failed_to_process > 0 || summary.cancelled > 0 || cancellation.is_requested() {
         std::process::exit(1);
     }
 }
@@ -184,6 +314,7 @@ fn prove_paths(problem_runs: &[ProblemRun], options: &ProveCommand) {
 fn prove_file(
     problem_run: &ProblemRun,
     options: &ProveCommand,
+    cancellation: &CancellationState,
     current: usize,
     total: usize,
 ) -> ProveFileResult {
@@ -193,7 +324,12 @@ fn prove_file(
     let problem_id = problem_run.problem_id();
     let (formulae, atoms) = subset_stats_fields(problem_run.subset_stats);
 
-    match run_problem_verbose_with_options(&input, options.display.show_sequent, proof_options) {
+    match run_problem_verbose_with_options_and_cancel(
+        &input,
+        options.display.show_sequent,
+        proof_options,
+        cancellation.flag(),
+    ) {
         Ok(result) => {
             clear_parse_failure_marker(&problem_run.path);
             let elapsed_ms = started_at.elapsed().as_millis();
@@ -262,7 +398,7 @@ fn prove_file(
 }
 
 /// Runs rule inspection over every `.p` file in a directory and prints aggregate counts.
-fn inspect_rules_directory(dir: &Path, options: &RulesCommand) {
+fn inspect_rules_directory(dir: &Path, options: &RulesCommand, cancellation: &CancellationState) {
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     let mut problem_runs = Vec::new();
     for entry in entries {
@@ -280,62 +416,85 @@ fn inspect_rules_directory(dir: &Path, options: &RulesCommand) {
     }
 
     print_rules_preamble(options.format, None);
-    inspect_rules_paths(&problem_runs, options);
+    inspect_rules_paths(&problem_runs, options, cancellation);
 }
 
 /// Processes many problems through the rule matcher and emits aggregate results.
-fn inspect_rules_paths(problem_runs: &[ProblemRun], options: &RulesCommand) {
-    let mut failures = 0usize;
-    let mut processed = 0usize;
-    let mut skipped = 0usize;
-    let mut matched_problems = 0usize;
-    let mut failed_files = Vec::new();
-
+fn inspect_rules_paths(
+    problem_runs: &[ProblemRun],
+    options: &RulesCommand,
+    cancellation: &CancellationState,
+) {
+    let mut summary = RulesBatchSummary::default();
     let total = problem_runs.len();
     for (index, problem_run) in problem_runs.iter().enumerate() {
+        cancellation.set_next_problem(Some(format!(
+            "[{}/{}] {} ({})",
+            index + 1,
+            total,
+            problem_run.problem_id(),
+            problem_run.path.display()
+        )));
+        if cancellation.is_requested() {
+            summary.cancelled = true;
+            break;
+        }
+
         if should_skip_parse_failed_file(&problem_run.path, options) {
-            skipped += 1;
+            summary.skipped += 1;
             continue;
         }
 
-        processed += 1;
-        let inspection = inspect_rules_file(problem_run, options, index + 1, total);
+        summary.processed += 1;
+        let inspection = inspect_rules_file(problem_run, options, cancellation, index + 1, total);
         if inspection.had_rule_match {
-            matched_problems += 1;
+            summary.rule_matches += 1;
         }
-        if !inspection.success {
-            failures += 1;
-            failed_files.push(problem_run.path.clone());
+        if inspection.success {
+            summary.succeeded += 1;
+        } else {
+            summary.failed += 1;
+            summary.failed_files.push(problem_run.path.clone());
         }
     }
+    cancellation.set_next_problem(None);
 
     match options.format {
         OutputFormat::Human => {
             print_summary_header("summary");
             print_summary_row(&[
-                ("processed", processed.to_string()),
-                ("skipped", skipped.to_string()),
-                ("succeeded", (processed - failures).to_string()),
-                ("failed", failures.to_string()),
-                ("rule_matches", matched_problems.to_string()),
+                ("processed", summary.processed.to_string()),
+                ("skipped", summary.skipped.to_string()),
+                ("succeeded", summary.succeeded.to_string()),
+                ("failed", summary.failed.to_string()),
+                ("rule_matches", summary.rule_matches.to_string()),
+                ("cancelled", yes_no(summary.cancelled).to_string()),
             ]);
+            if summary.cancelled {
+                eprintln!("Cancelled before starting the next problem");
+            }
         }
         OutputFormat::Tsv => {
             println!(
-                "summary\t{processed}\t{skipped}\t{}\t{failures}\t{matched_problems}",
-                processed - failures
+                "summary\t{}\t{}\t{}\t{}\t{}\t{}",
+                summary.processed,
+                summary.skipped,
+                summary.succeeded,
+                summary.failed,
+                summary.rule_matches,
+                summary.cancelled
             );
         }
     }
 
-    if options.format == OutputFormat::Human && !failed_files.is_empty() {
+    if options.format == OutputFormat::Human && !summary.failed_files.is_empty() {
         eprintln!("Failed files:");
-        for path in failed_files {
+        for path in summary.failed_files {
             eprintln!("  {}", path.display());
         }
     }
 
-    if failures > 0 {
+    if summary.failed > 0 || summary.cancelled {
         std::process::exit(1);
     }
 }
@@ -344,6 +503,7 @@ fn inspect_rules_paths(problem_runs: &[ProblemRun], options: &RulesCommand) {
 fn inspect_rules_file(
     problem_run: &ProblemRun,
     options: &RulesCommand,
+    _cancellation: &CancellationState,
     current: usize,
     total: usize,
 ) -> RulesInspectionResult {
@@ -458,6 +618,9 @@ fn report_single_file(success: bool) {
 /// Prints single-file prover status and exits non-zero on processing failure.
 fn report_single_prove_file(result: ProveFileResult) {
     match result {
+        ProveFileResult::Status(ProofStatus::Cancelled) => {
+            std::process::exit(1);
+        }
         ProveFileResult::Status(_) => {}
         ProveFileResult::ProcessingFailure => {
             std::process::exit(1);
@@ -513,4 +676,8 @@ fn clear_parse_failure_marker(path: &Path) {
 fn should_skip_parse_failed_file(path: &Path, options: &impl ParseFailureOptions) -> bool {
     !options.retry_parse_failed()
         && parse_failure_marker_path(path).is_some_and(|marker_path| marker_path.exists())
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value { "yes" } else { "no" }
 }
