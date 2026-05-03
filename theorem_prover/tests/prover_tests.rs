@@ -1,7 +1,13 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use theorem_prover::ast::{Formula, Symbol, Term, Var};
-use theorem_prover::{ProofOptions, ProofResult, ProofStatus, Sequent, parse_problem, prove};
+use theorem_prover::{
+    ProofOptions, ProofResult, ProofStatus, Sequent, parse_problem, prove, prove_with_cancel,
+};
 
 fn predicate_formula(name: &str) -> Formula {
     Formula::atom(name)
@@ -478,6 +484,45 @@ fn prove_returns_unknown_when_step_limit_is_hit() {
     );
 
     assert_eq!(result.status, ProofStatus::Unknown);
+}
+
+#[test]
+fn prove_returns_cancelled_when_flag_is_already_set() {
+    let sequent = Sequent {
+        left: vec![Formula::or(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+        right: vec![predicate_formula("p"), predicate_formula("q")],
+    };
+    let cancelled = AtomicBool::new(true);
+
+    let result = prove_with_cancel(&sequent, default_options(), &cancelled);
+
+    assert_eq!(result.status, ProofStatus::Cancelled);
+}
+
+#[test]
+fn prove_returns_cancelled_when_flag_is_raised_during_search() {
+    let sequent = left_disjunction_timeout_sequent(24);
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let cancel_for_thread = Arc::clone(&cancelled);
+    let _signal_thread = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(1));
+        cancel_for_thread.store(true, Ordering::Relaxed);
+    });
+
+    let result = prove_with_cancel(
+        &sequent,
+        ProofOptions {
+            timeout: Duration::from_secs(1),
+            max_depth: usize::MAX,
+            max_steps: usize::MAX,
+        },
+        cancelled.as_ref(),
+    );
+
+    assert_eq!(result.status, ProofStatus::Cancelled);
 }
 
 #[test]
