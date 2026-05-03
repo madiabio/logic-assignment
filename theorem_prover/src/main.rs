@@ -5,7 +5,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
 use theorem_prover::{
-    ProblemPipelineError, ProofOptions, build_problem_sequent, run_problem_verbose_with_options,
+    ProblemPipelineError, ProofOptions, ProofStatus, build_problem_sequent,
+    run_problem_verbose_with_options,
 };
 
 #[derive(Clone, Args)]
@@ -72,9 +73,19 @@ struct RulesCommand {
 }
 
 #[derive(Clone, Copy)]
+/// Outcome of running rule inspection on one file.
 struct RulesInspectionResult {
     success: bool,
     had_rule_match: bool,
+}
+
+#[derive(Clone)]
+/// Result of running the prover on one file.
+enum ProveFileResult {
+    /// The file was processed successfully and produced a proof status.
+    Status(ProofStatus),
+    /// The file could not be processed because parsing or sequent building failed.
+    ProcessingFailure,
 }
 
 fn main() {
@@ -87,15 +98,17 @@ fn main() {
     }
 }
 
+/// Dispatches the `prove` subcommand to either file or directory handling.
 fn run_prover_mode(target: &Path, options: &ProveCommand) {
     if target.is_dir() {
         prove_directory(target, options);
     } else {
         let result = prove_file(target, options);
-        report_single_file(target, result);
+        report_single_prove_file(target, result);
     }
 }
 
+/// Dispatches the `rules` subcommand to either file or directory handling.
 fn run_rules_mode(target: &Path, options: &RulesCommand) {
     if target.is_dir() {
         inspect_rules_directory(target, options);
@@ -105,11 +118,18 @@ fn run_rules_mode(target: &Path, options: &RulesCommand) {
     }
 }
 
+/// Runs the prover over every `.p` file in a directory and prints per-status totals.
 fn prove_directory(dir: &Path, options: &ProveCommand) {
-    let mut failures = 0usize;
     let mut processed = 0usize;
     let mut skipped = 0usize;
     let mut failed_files = Vec::new();
+    let mut provable = 0usize;
+    let mut not_provable = 0usize;
+    let mut timeout = 0usize;
+    let mut unknown = 0usize;
+    let mut not_implemented = 0usize;
+    let mut error = 0usize;
+    let mut processing_failures = 0usize;
 
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     for entry in entries {
@@ -126,16 +146,29 @@ fn prove_directory(dir: &Path, options: &ProveCommand) {
         }
 
         processed += 1;
-        if !prove_file(&path, options) {
-            failures += 1;
-            failed_files.push(path);
+        match prove_file(&path, options) {
+            ProveFileResult::Status(ProofStatus::Provable) => provable += 1,
+            ProveFileResult::Status(ProofStatus::NotProvable) => not_provable += 1,
+            ProveFileResult::Status(ProofStatus::Timeout) => timeout += 1,
+            ProveFileResult::Status(ProofStatus::Unknown) => unknown += 1,
+            ProveFileResult::Status(ProofStatus::NotImplemented) => not_implemented += 1,
+            ProveFileResult::Status(ProofStatus::Error) => error += 1,
+            ProveFileResult::ProcessingFailure => {
+                processing_failures += 1;
+                failed_files.push(path);
+            }
         }
     }
 
     println!("Processed {processed} file(s)");
     println!("Skipped: {skipped}");
-    println!("Succeeded: {}", processed - failures);
-    println!("Failed: {failures}");
+    println!("Provable: {provable}");
+    println!("Not provable: {not_provable}");
+    println!("Timeout: {timeout}");
+    println!("Unknown: {unknown}");
+    println!("Not implemented: {not_implemented}");
+    println!("Error: {error}");
+    println!("Failed to process: {processing_failures}");
 
     if !failed_files.is_empty() {
         eprintln!("Failed files:");
@@ -144,12 +177,13 @@ fn prove_directory(dir: &Path, options: &ProveCommand) {
         }
     }
 
-    if failures > 0 {
+    if processing_failures > 0 {
         std::process::exit(1);
     }
 }
 
-fn prove_file(path: &Path, options: &ProveCommand) -> bool {
+/// Runs the prover on one file and returns either a proof status or a processing failure.
+fn prove_file(path: &Path, options: &ProveCommand) -> ProveFileResult {
     let input = fs::read_to_string(path).expect("Failed to read input file");
     let proof_options = prover_options_from_cli(options);
 
@@ -157,22 +191,23 @@ fn prove_file(path: &Path, options: &ProveCommand) -> bool {
         Ok(result) => {
             clear_parse_failure_marker(path);
             println!("{}: prover returned {:?}", path.display(), result.status);
-            true
+            ProveFileResult::Status(result.status)
         }
         Err(ProblemPipelineError::Parse(err)) => {
             write_parse_failure_marker(path, &err);
             eprintln!("{}: parse failed", path.display());
             eprintln!("{err}");
-            false
+            ProveFileResult::ProcessingFailure
         }
         Err(ProblemPipelineError::SequentBuild(err)) => {
             eprintln!("{}: sequent construction failed", path.display());
             eprintln!("{err:?}");
-            false
+            ProveFileResult::ProcessingFailure
         }
     }
 }
 
+/// Runs rule inspection over every `.p` file in a directory and prints aggregate counts.
 fn inspect_rules_directory(dir: &Path, options: &RulesCommand) {
     let mut failures = 0usize;
     let mut processed = 0usize;
@@ -223,6 +258,7 @@ fn inspect_rules_directory(dir: &Path, options: &RulesCommand) {
     }
 }
 
+/// Runs rule inspection on one file and reports whether parsing/building succeeded.
 fn inspect_rules_file(path: &Path, options: &RulesCommand) -> RulesInspectionResult {
     let input = fs::read_to_string(path).expect("Failed to read input file");
 
@@ -266,6 +302,7 @@ fn inspect_rules_file(path: &Path, options: &RulesCommand) -> RulesInspectionRes
     }
 }
 
+/// Formats a matched rule occurrence for CLI output.
 fn format_rule_match(rule_match: RuleMatch) -> String {
     format!(
         "{:?} on {:?}[{}]",
@@ -273,6 +310,7 @@ fn format_rule_match(rule_match: RuleMatch) -> String {
     )
 }
 
+/// Prints single-file rule-inspection status and exits non-zero on failure.
 fn report_single_file(path: &Path, success: bool) {
     if success {
         println!("{}: pipeline completed", path.display());
@@ -281,11 +319,25 @@ fn report_single_file(path: &Path, success: bool) {
     }
 }
 
+/// Prints single-file prover status and exits non-zero on processing failure.
+fn report_single_prove_file(path: &Path, result: ProveFileResult) {
+    match result {
+        ProveFileResult::Status(_) => {
+            println!("{}: pipeline completed", path.display());
+        }
+        ProveFileResult::ProcessingFailure => {
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Returns the path of the `.parse_failed` marker associated with a `.p` file.
 fn parse_failure_marker_path(path: &Path) -> Option<PathBuf> {
     (path.extension().and_then(|ext| ext.to_str()) == Some("p"))
         .then(|| PathBuf::from(format!("{}.parse_failed", path.display())))
 }
 
+/// Writes a `.parse_failed` marker alongside an input file after parse failure.
 fn write_parse_failure_marker(path: &Path, err: &str) {
     let Some(marker_path) = parse_failure_marker_path(path) else {
         return;
@@ -302,6 +354,7 @@ fn write_parse_failure_marker(path: &Path, err: &str) {
     }
 }
 
+/// Removes any stale `.parse_failed` marker for a file after successful processing.
 fn clear_parse_failure_marker(path: &Path) {
     let Some(marker_path) = parse_failure_marker_path(path) else {
         return;
@@ -321,11 +374,13 @@ fn clear_parse_failure_marker(path: &Path) {
     }
 }
 
+/// Returns whether a file should be skipped because it already has a parse-failure marker.
 fn should_skip_parse_failed_file(path: &Path, options: &impl ParseFailureOptions) -> bool {
     !options.retry_parse_failed()
         && parse_failure_marker_path(path).is_some_and(|marker_path| marker_path.exists())
 }
 
+/// Shared access to the retry-parse-failed option across CLI subcommands.
 trait ParseFailureOptions {
     fn retry_parse_failed(&self) -> bool;
 }
@@ -342,6 +397,7 @@ impl ParseFailureOptions for RulesCommand {
     }
 }
 
+/// Builds prover options by applying CLI overrides on top of the default search bounds.
 fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
     let mut proof_options = ProofOptions::default();
     if let Some(timeout_ms) = options.timeout_ms {
