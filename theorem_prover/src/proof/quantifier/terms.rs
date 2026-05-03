@@ -3,55 +3,6 @@ use std::collections::BTreeSet;
 use crate::Sequent;
 use crate::ast::{Atom, Formula, Symbol, Term};
 
-pub(crate) fn instantiate_quantified_formula(
-    vars: &[crate::ast::Var],
-    body: &Formula,
-    replacement_name: String,
-    wrap_remaining: fn(Vec<crate::ast::Var>, Box<Formula>) -> Formula,
-) -> Option<Formula> {
-    let replacement = Term::Const(Symbol::User(replacement_name));
-    instantiate_quantified_formula_with_term(vars, body, &replacement, wrap_remaining)
-}
-
-pub(crate) fn instantiate_quantified_formula_with_term(
-    vars: &[crate::ast::Var],
-    body: &Formula,
-    replacement: &Term,
-    wrap_remaining: fn(Vec<crate::ast::Var>, Box<Formula>) -> Formula,
-) -> Option<Formula> {
-    let (first_var, remaining_vars) = vars.split_first()?;
-    let instantiated_body = body.substitute_var(&first_var.name, replacement);
-
-    Some(if remaining_vars.is_empty() {
-        instantiated_body
-    } else {
-        wrap_remaining(remaining_vars.to_vec(), Box::new(instantiated_body))
-    })
-}
-
-pub(crate) fn fresh_eigenconstant_name(sequent: &Sequent) -> String {
-    let mut used = BTreeSet::new();
-    collect_sequent_symbols(sequent, &mut used);
-
-    for suffix in 0.. {
-        for letter in b'a'..=b'z' {
-            let mut candidate = String::from(char::from(letter));
-            if suffix > 0 {
-                candidate.push_str(&suffix.to_string());
-            }
-            if !used.contains(&candidate) {
-                return candidate;
-            }
-        }
-    }
-
-    unreachable!("fresh eigenconstant generation should always find a name")
-}
-
-pub(crate) fn fresh_branch_term_name(sequent: &Sequent) -> String {
-    fresh_name_avoiding_sequent(sequent, "w")
-}
-
 pub(crate) fn visible_terms_in_sequent(sequent: &Sequent) -> Vec<Term> {
     let mut seen = BTreeSet::new();
     let mut terms = Vec::new();
@@ -66,31 +17,7 @@ pub(crate) fn visible_terms_in_sequent(sequent: &Sequent) -> Vec<Term> {
     terms
 }
 
-fn fresh_name_avoiding_sequent(sequent: &Sequent, prefix: &str) -> String {
-    let mut used = BTreeSet::new();
-    collect_sequent_symbols(sequent, &mut used);
-
-    if !prefix.is_empty() && !used.contains(prefix) {
-        return prefix.to_owned();
-    }
-
-    for suffix in 0.. {
-        for letter in b'a'..=b'z' {
-            let mut candidate = prefix.to_owned();
-            candidate.push(char::from(letter));
-            if suffix > 0 {
-                candidate.push_str(&suffix.to_string());
-            }
-            if !used.contains(&candidate) {
-                return candidate;
-            }
-        }
-    }
-
-    unreachable!("fresh branch-term generation should always find a name")
-}
-
-fn collect_sequent_symbols(sequent: &Sequent, used: &mut BTreeSet<String>) {
+pub(crate) fn collect_sequent_symbols(sequent: &Sequent, used: &mut BTreeSet<String>) {
     for formula in &sequent.left {
         collect_formula_symbols(formula, used);
     }

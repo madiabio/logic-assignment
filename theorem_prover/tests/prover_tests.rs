@@ -1,10 +1,28 @@
 use std::time::Duration;
 
-use theorem_prover::ast::Formula;
+use theorem_prover::ast::{Formula, Symbol, Term, Var};
 use theorem_prover::{ProofOptions, ProofResult, ProofStatus, Sequent, parse_problem, prove};
 
 fn predicate_formula(name: &str) -> Formula {
     Formula::atom(name)
+}
+
+fn var(name: &str) -> Var {
+    Var {
+        name: name.to_owned(),
+    }
+}
+
+fn variable(name: &str) -> Term {
+    Term::Var(var(name))
+}
+
+fn constant(name: &str) -> Term {
+    Term::Const(Symbol::User(name.to_owned()))
+}
+
+fn predicate_formula_with_args(name: &str, args: Vec<Term>) -> Formula {
+    Formula::predicate(name, args)
 }
 
 fn left_disjunction_timeout_sequent(width: usize) -> Sequent {
@@ -256,6 +274,56 @@ fn prove_returns_not_provable_after_applying_implies_right_rule() {
     };
 
     let result = prove(&sequent, default_options());
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_reuses_visible_term_for_exists_right_before_fresh_fallback() {
+    let sequent = Sequent {
+        left: vec![predicate_formula_with_args("p", vec![constant("a")])],
+        right: vec![Formula::Exists(
+            vec![var("X")],
+            Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+        )],
+    };
+
+    let result = prove(&sequent, default_options());
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn prove_reuses_visible_term_for_forall_left_before_fresh_fallback() {
+    let sequent = Sequent {
+        left: vec![Formula::ForAll(
+            vec![var("X")],
+            Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+        )],
+        right: vec![predicate_formula_with_args("p", vec![constant("a")])],
+    };
+
+    let result = prove(&sequent, default_options());
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn prove_stops_after_one_fresh_exists_right_fallback() {
+    let sequent = Sequent {
+        left: Vec::new(),
+        right: vec![Formula::Exists(
+            vec![var("X")],
+            Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+        )],
+    };
+
+    let result = prove(
+        &sequent,
+        ProofOptions {
+            timeout: Duration::from_millis(50),
+        },
+    );
 
     assert_eq!(result.status, ProofStatus::NotProvable);
 }

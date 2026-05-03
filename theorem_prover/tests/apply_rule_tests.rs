@@ -750,7 +750,7 @@ fn apply_rule_adds_exists_right_instantiation_while_preserving_quantifier() {
                     vec![var("X")],
                     Box::new(predicate_formula_with_args("p", vec![variable("X")])),
                 ),
-                predicate_formula_with_args("p", vec![constant("c")]),
+                predicate_formula_with_args("p", vec![constant("a")]),
                 predicate_formula_with_args("after", vec![constant("b")]),
             ],
         }])
@@ -795,9 +795,43 @@ fn apply_rule_adds_exists_right_instantiation_one_variable_at_a_time() {
                     vec![var("Y")],
                     Box::new(predicate_formula_with_args(
                         "p",
-                        vec![constant("a"), variable("Y")],
+                        vec![constant("w"), variable("Y")],
                     )),
                 ),
+            ],
+        }])
+    );
+}
+
+#[test]
+fn apply_rule_uses_fresh_exists_right_fallback_when_no_visible_term_exists() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("source")],
+        right: vec![Formula::Exists(
+            vec![var("X")],
+            Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+        )],
+    };
+
+    let application = apply_rule_with_optional_trace(
+        &sequent,
+        RuleMatch {
+            rule: Rule::ExistsR,
+            side: Side::Right,
+            index: 0,
+        },
+    );
+
+    assert_eq!(
+        application,
+        RuleApplication::Premises(vec![Sequent {
+            left: vec![predicate_formula("source")],
+            right: vec![
+                Formula::Exists(
+                    vec![var("X")],
+                    Box::new(predicate_formula_with_args("p", vec![variable("X")])),
+                ),
+                predicate_formula_with_args("p", vec![constant("w")]),
             ],
         }])
     );

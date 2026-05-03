@@ -1,38 +1,6 @@
-// Defines rules and whether or not they are valid on a particular sequent.
 use crate::Sequent;
 use crate::ast::Formula;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Rule {
-    Id,
-    TopR,
-    BottomL,
-    AndL,
-    AndR,
-    OrL,
-    OrR,
-    ImpliesL,
-    ImpliesR,
-    NotL,
-    NotR,
-    ForAllL,
-    ForAllR,
-    ExistsL,
-    ExistsR,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Side {
-    Left,
-    Right,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RuleMatch {
-    pub rule: Rule,
-    pub side: Side,
-    pub index: usize,
-}
+use crate::proof::rules::kinds::{Rule, RuleMatch, Side};
 
 pub fn find_applicable_rules(sequent: &Sequent) -> Vec<RuleMatch> {
     let mut matches = Vec::new();
