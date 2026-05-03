@@ -1,27 +1,74 @@
+use clap::{Args, Parser, Subcommand};
 use env_logger::Target;
-use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
-use theorem_prover::{ProblemPipelineError, build_problem_sequent, run_problem_verbose};
+use theorem_prover::{
+    ProblemPipelineError, ProofOptions, build_problem_sequent, run_problem_verbose_with_options,
+};
 
-#[derive(Clone, Copy)]
-struct RunOptions {
+#[derive(Clone, Args)]
+struct SharedRunOptions {
+    /// Reprocess files that already have a `.parse_failed` marker.
+    #[arg(long)]
     retry_parse_failed: bool,
+}
+
+#[derive(Clone, Args)]
+struct SharedDisplayOptions {
+    /// Print the constructed sequent before running the selected command.
+    #[arg(long)]
     show_sequent: bool,
 }
 
-#[derive(Clone, Copy)]
-enum Mode {
-    Prover,
-    Rules,
+#[derive(Parser)]
+#[command(
+    author,
+    version,
+    about,
+    long_about = "Theorem prover CLI.\n\nUse `prove` to run proof search with configurable timeout, depth, and step limits.\nUse `rules` to inspect which sequent-calculus rules apply to a problem."
+)]
+struct CliOptions {
+    #[command(subcommand)]
+    command: Command,
 }
 
-struct CliOptions {
-    mode: Mode,
+#[derive(Subcommand)]
+enum Command {
+    /// Run the prover on a file or directory of `.p` problems.
+    Prove(ProveCommand),
+    /// Show which rules apply to a file or directory of `.p` problems.
+    Rules(RulesCommand),
+}
+
+#[derive(Clone, Args)]
+struct ProveCommand {
+    #[command(flatten)]
+    run: SharedRunOptions,
+    #[command(flatten)]
+    display: SharedDisplayOptions,
+    /// Wall-clock timeout in milliseconds.
+    #[arg(long)]
+    timeout_ms: Option<u64>,
+    /// Maximum recursive proof-search depth before returning `Unknown`.
+    #[arg(long)]
+    max_depth: Option<usize>,
+    /// Maximum proof-search steps before returning `Unknown`.
+    #[arg(long)]
+    max_steps: Option<usize>,
+    /// Input `.p` file or directory of `.p` files to prove.
     target: String,
-    run_options: RunOptions,
+}
+
+#[derive(Clone, Args)]
+struct RulesCommand {
+    #[command(flatten)]
+    run: SharedRunOptions,
+    #[command(flatten)]
+    display: SharedDisplayOptions,
+    /// Input `.p` file or directory of `.p` files to inspect.
+    target: String,
 }
 
 #[derive(Clone, Copy)]
@@ -34,58 +81,13 @@ fn main() {
     // init a logger
     env_logger::Builder::new().target(Target::Stdout).init();
 
-    // parse cli args
-    let Some(options) = parse_cli_args(env::args().skip(1)) else {
-        print_usage_and_exit();
-    };
-
-    match options.mode {
-        Mode::Prover => run_prover_mode(Path::new(&options.target), options.run_options),
-        Mode::Rules => run_rules_mode(Path::new(&options.target), options.run_options),
+    match CliOptions::parse().command {
+        Command::Prove(options) => run_prover_mode(Path::new(&options.target), &options),
+        Command::Rules(options) => run_rules_mode(Path::new(&options.target), &options),
     }
 }
 
-fn parse_cli_args(args: impl IntoIterator<Item = String>) -> Option<CliOptions> {
-    let mut mode = Mode::Prover;
-    let mut retry_parse_failed = false;
-    let mut show_sequent = false;
-    let mut target: Option<String> = None;
-
-    for arg in args {
-        match arg.as_str() {
-            "--rules" => mode = Mode::Rules,
-            "--retry-parse-failed" => retry_parse_failed = true,
-            "--show-sequent" => show_sequent = true,
-            _ if arg.starts_with("--") => return None,
-            _ => {
-                if target.replace(arg).is_some() {
-                    return None;
-                }
-            }
-        }
-    }
-
-    target.map(|target| CliOptions {
-        mode,
-        target,
-        run_options: RunOptions {
-            retry_parse_failed,
-            show_sequent,
-        },
-    })
-}
-
-fn print_usage_and_exit() -> ! {
-    eprintln!("Usage: cargo run -- [--show-sequent] <file.tptp | directory>");
-    eprintln!("   or: cargo run -- --retry-parse-failed [--show-sequent] <file.tptp | directory>");
-    eprintln!("   or: cargo run -- --rules [--show-sequent] <file.p | directory>");
-    eprintln!(
-        "   or: cargo run -- --rules --retry-parse-failed [--show-sequent] <file.p | directory>"
-    );
-    std::process::exit(1);
-}
-
-fn run_prover_mode(target: &Path, options: RunOptions) {
+fn run_prover_mode(target: &Path, options: &ProveCommand) {
     if target.is_dir() {
         prove_directory(target, options);
     } else {
@@ -94,7 +96,7 @@ fn run_prover_mode(target: &Path, options: RunOptions) {
     }
 }
 
-fn run_rules_mode(target: &Path, options: RunOptions) {
+fn run_rules_mode(target: &Path, options: &RulesCommand) {
     if target.is_dir() {
         inspect_rules_directory(target, options);
     } else {
@@ -103,7 +105,7 @@ fn run_rules_mode(target: &Path, options: RunOptions) {
     }
 }
 
-fn prove_directory(dir: &Path, options: RunOptions) {
+fn prove_directory(dir: &Path, options: &ProveCommand) {
     let mut failures = 0usize;
     let mut processed = 0usize;
     let mut skipped = 0usize;
@@ -147,10 +149,11 @@ fn prove_directory(dir: &Path, options: RunOptions) {
     }
 }
 
-fn prove_file(path: &Path, options: RunOptions) -> bool {
+fn prove_file(path: &Path, options: &ProveCommand) -> bool {
     let input = fs::read_to_string(path).expect("Failed to read input file");
+    let proof_options = prover_options_from_cli(options);
 
-    match run_problem_verbose(&input, options.show_sequent) {
+    match run_problem_verbose_with_options(&input, options.display.show_sequent, proof_options) {
         Ok(result) => {
             clear_parse_failure_marker(path);
             println!("{}: prover returned {:?}", path.display(), result.status);
@@ -170,7 +173,7 @@ fn prove_file(path: &Path, options: RunOptions) -> bool {
     }
 }
 
-fn inspect_rules_directory(dir: &Path, options: RunOptions) {
+fn inspect_rules_directory(dir: &Path, options: &RulesCommand) {
     let mut failures = 0usize;
     let mut processed = 0usize;
     let mut skipped = 0usize;
@@ -220,14 +223,14 @@ fn inspect_rules_directory(dir: &Path, options: RunOptions) {
     }
 }
 
-fn inspect_rules_file(path: &Path, options: RunOptions) -> RulesInspectionResult {
+fn inspect_rules_file(path: &Path, options: &RulesCommand) -> RulesInspectionResult {
     let input = fs::read_to_string(path).expect("Failed to read input file");
 
     match build_problem_sequent(&input) {
         Ok(sequent) => {
             clear_parse_failure_marker(path);
             println!("{}:", path.display());
-            if options.show_sequent {
+            if options.display.show_sequent {
                 println!("  {sequent}");
             }
             let matches = find_applicable_rules(&sequent);
@@ -318,7 +321,37 @@ fn clear_parse_failure_marker(path: &Path) {
     }
 }
 
-fn should_skip_parse_failed_file(path: &Path, options: RunOptions) -> bool {
-    !options.retry_parse_failed
+fn should_skip_parse_failed_file(path: &Path, options: &impl ParseFailureOptions) -> bool {
+    !options.retry_parse_failed()
         && parse_failure_marker_path(path).is_some_and(|marker_path| marker_path.exists())
+}
+
+trait ParseFailureOptions {
+    fn retry_parse_failed(&self) -> bool;
+}
+
+impl ParseFailureOptions for ProveCommand {
+    fn retry_parse_failed(&self) -> bool {
+        self.run.retry_parse_failed
+    }
+}
+
+impl ParseFailureOptions for RulesCommand {
+    fn retry_parse_failed(&self) -> bool {
+        self.run.retry_parse_failed
+    }
+}
+
+fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
+    let mut proof_options = ProofOptions::default();
+    if let Some(timeout_ms) = options.timeout_ms {
+        proof_options.timeout = std::time::Duration::from_millis(timeout_ms);
+    }
+    if let Some(max_depth) = options.max_depth {
+        proof_options.max_depth = max_depth;
+    }
+    if let Some(max_steps) = options.max_steps {
+        proof_options.max_steps = max_steps;
+    }
+    proof_options
 }

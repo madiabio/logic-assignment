@@ -37,7 +37,7 @@ fof(conj_1,conjecture,p).
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args([
-            "--rules",
+            "rules",
             "--show-sequent",
             input.to_str().expect("path should be utf-8"),
         ])
@@ -71,7 +71,7 @@ fof(conj_1,conjecture,p).
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args(["rules", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -96,7 +96,7 @@ fof(conj_1,conjecture,p).
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args([
-            "--rules",
+            "rules",
             "--show-sequent",
             input.to_str().expect("path should be utf-8"),
         ])
@@ -123,7 +123,7 @@ fof(conj_1,conjecture,p).
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .arg(input.to_str().expect("path should be utf-8"))
+        .args(["prove", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -151,6 +151,7 @@ fof(conj_1,conjecture,p).
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args([
+            "prove",
             "--show-sequent",
             input.to_str().expect("path should be utf-8"),
         ])
@@ -180,7 +181,7 @@ fof(conj_1,conjecture,q).
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args(["rules", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -222,7 +223,7 @@ fof(conj_1,conjecture,p).
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", dir.to_str().expect("path should be utf-8")])
+        .args(["rules", dir.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -256,7 +257,7 @@ fof(ax_1,axiom,p).
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args(["rules", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -286,7 +287,7 @@ fof(ax_1,axiom,p)
     let marker = parse_failed_marker_path(&input);
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args(["rules", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -322,7 +323,7 @@ fof(ax_1,axiom,p)
     let marker = parse_failed_marker_path(&input);
 
     let first_run = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args(["rules", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
     assert!(
@@ -342,7 +343,7 @@ fof(conj_1,conjecture,p).
     .expect("problem file should be rewritten");
 
     let second_run = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args(["rules", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -372,7 +373,7 @@ fof(ax_1,axiom,p).
     let marker = parse_failed_marker_path(&input);
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", input.to_str().expect("path should be utf-8")])
+        .args(["rules", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -419,7 +420,7 @@ fof(ax_1,axiom,p)
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", dir.to_str().expect("path should be utf-8")])
+        .args(["rules", dir.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -470,7 +471,7 @@ fof(conj_1,conjecture,q).
         .expect("marker should be written");
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["--rules", dir.to_str().expect("path should be utf-8")])
+        .args(["rules", dir.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -515,7 +516,7 @@ fof(conj_1,conjecture,p).
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args([
-            "--rules",
+            "rules",
             "--retry-parse-failed",
             dir.to_str().expect("path should be utf-8"),
         ])
@@ -539,5 +540,36 @@ fof(conj_1,conjecture,p).
     assert!(
         !marker.exists(),
         "expected retry flag to clear stale marker after success"
+    );
+}
+
+#[test]
+fn prove_subcommand_reports_unknown_when_step_limit_is_hit() {
+    let dir = make_temp_dir("prove_unknown_step_limit");
+    let input = write_problem_file(
+        &dir,
+        "bounded_unknown.p",
+        r#"
+fof(ax_1,axiom,(p & q)).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args([
+            "prove",
+            "--max-steps",
+            "0",
+            input.to_str().expect("path should be utf-8"),
+        ])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("prover returned Unknown"),
+        "stdout was:\n{stdout}"
     );
 }

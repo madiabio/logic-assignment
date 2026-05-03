@@ -325,6 +325,37 @@ fn prove_stops_after_one_fresh_exists_right_fallback() {
         &sequent,
         ProofOptions {
             timeout: Duration::from_millis(50),
+            ..default_options()
+        },
+    );
+
+    assert_eq!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn prove_does_not_promote_generated_terms_into_quantifier_candidates() {
+    let sequent = Sequent {
+        left: vec![
+            Formula::ForAll(
+                vec![var("X")],
+                Box::new(predicate_formula_with_args(
+                    "p",
+                    vec![Term::Fun {
+                        name: Symbol::User("f".to_owned()),
+                        args: vec![variable("X")],
+                    }],
+                )),
+            ),
+            predicate_formula_with_args("p", vec![constant("a")]),
+        ],
+        right: vec![predicate_formula("goal")],
+    };
+
+    let result = prove(
+        &sequent,
+        ProofOptions {
+            timeout: Duration::from_millis(50),
+            ..default_options()
         },
     );
 
@@ -380,7 +411,14 @@ fn prove_returns_not_provable_when_impliesl_leaves_an_open_branch() {
 fn prove_returns_timeout_for_large_left_branching_search() {
     let sequent = left_disjunction_timeout_sequent(24);
 
-    let result = prove(&sequent, default_options());
+    let result = prove(
+        &sequent,
+        ProofOptions {
+            timeout: Duration::from_millis(1),
+            max_depth: usize::MAX,
+            max_steps: usize::MAX,
+        },
+    );
 
     assert_eq!(result.status, ProofStatus::Timeout);
 }
@@ -390,11 +428,56 @@ fn prove_respects_custom_timeout_options() {
     let sequent = left_disjunction_timeout_sequent(24);
     let options = ProofOptions {
         timeout: Duration::from_millis(1),
+        ..default_options()
     };
 
     let result = prove(&sequent, options);
 
     assert_eq!(result.status, ProofStatus::Timeout);
+}
+
+#[test]
+fn prove_returns_unknown_when_depth_limit_is_hit() {
+    let sequent = Sequent {
+        left: vec![Formula::or(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+        right: vec![predicate_formula("p"), predicate_formula("q")],
+    };
+
+    let result = prove(
+        &sequent,
+        ProofOptions {
+            max_depth: 0,
+            timeout: Duration::from_secs(1),
+            max_steps: usize::MAX,
+        },
+    );
+
+    assert_eq!(result.status, ProofStatus::Unknown);
+}
+
+#[test]
+fn prove_returns_unknown_when_step_limit_is_hit() {
+    let sequent = Sequent {
+        left: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+        right: vec![predicate_formula("p")],
+    };
+
+    let result = prove(
+        &sequent,
+        ProofOptions {
+            max_depth: usize::MAX,
+            timeout: Duration::from_secs(1),
+            max_steps: 0,
+        },
+    );
+
+    assert_eq!(result.status, ProofStatus::Unknown);
 }
 
 #[test]

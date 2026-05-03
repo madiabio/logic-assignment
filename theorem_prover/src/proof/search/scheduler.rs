@@ -1,8 +1,11 @@
 //! Scheduling policy for choosing which matched rule to try next.
+//!
+//! Use frozen baseline visible terms first, then allow exactly one fresh fallback per quantified
+//! occurrence, and never promote generated terms into the candidate pool.
 
 use crate::Sequent;
 use crate::ast::Term;
-use crate::proof::quantifier::{fresh_branch_term_name, visible_terms_in_sequent};
+use crate::proof::quantifier::fresh_branch_term_name;
 use crate::proof::rules::{Rule, RuleMatch, Side, find_applicable_rules};
 use crate::proof::search::branch_state::BranchState;
 
@@ -71,17 +74,7 @@ pub(crate) fn schedule_next_rules(
 
     let mut scheduled = Vec::new();
     for rule_match in &rule_matches {
-        if let Some(next_rule) = schedule_quantifier_reuse(sequent, state, rule_match) {
-            scheduled.push(next_rule);
-        }
-    }
-    if !scheduled.is_empty() {
-        return Some(scheduled);
-    }
-
-    let mut scheduled = Vec::new();
-    for rule_match in &rule_matches {
-        if let Some(next_rule) = schedule_quantifier_fresh_fallback(sequent, state, rule_match) {
+        for next_rule in schedule_quantifier_instantiations(sequent, state, rule_match) {
             scheduled.push(next_rule);
         }
     }
@@ -92,59 +85,54 @@ pub(crate) fn schedule_next_rules(
     None
 }
 
-/// Schedules quantifier rules that can reuse a visible term not tried on this branch yet.
-fn schedule_quantifier_reuse(
+/// Schedules frozen-baseline instantiations, then one fresh fallback per quantified occurrence.
+fn schedule_quantifier_instantiations(
     sequent: &Sequent,
     state: &BranchState,
     rule_match: &RuleMatch,
-) -> Option<ScheduledRule> {
-    let key = quantified_occurrence_key(sequent, rule_match.side, rule_match.index)?;
+) -> Vec<ScheduledRule> {
+    let Some(key) = quantified_occurrence_key(sequent, rule_match.side, rule_match.index) else {
+        return Vec::new();
+    };
     let usage = state
         .quantifier_usage
         .get(&key)
         .cloned()
         .unwrap_or_default();
 
-    let term = visible_terms_in_sequent(sequent)
-        .into_iter()
-        .find(|term| !usage.used_terms.contains(&term.to_string()))?;
+    let mut scheduled = Vec::new();
+    for term in state.baseline_terms.iter() {
+        if usage.used_baseline_terms.contains(term) {
+            continue;
+        }
 
-    Some(match rule_match.rule {
-        Rule::ForAllL => ScheduledRule::ForAllL {
-            rule_match: *rule_match,
-            term,
-            key,
-            fresh_fallback: false,
-        },
-        Rule::ExistsR => ScheduledRule::ExistsR {
-            rule_match: *rule_match,
-            term,
-            key,
-            fresh_fallback: false,
-        },
-        _ => return None,
-    })
-}
+        scheduled.push(match rule_match.rule {
+            Rule::ForAllL => ScheduledRule::ForAllL {
+                rule_match: *rule_match,
+                term: term.clone(),
+                key: key.clone(),
+                fresh_fallback: false,
+            },
+            Rule::ExistsR => ScheduledRule::ExistsR {
+                rule_match: *rule_match,
+                term: term.clone(),
+                key: key.clone(),
+                fresh_fallback: false,
+            },
+            _ => return Vec::new(),
+        });
+    }
 
-/// Schedules one fresh-term fallback for a quantified occurrence when reuse is exhausted.
-fn schedule_quantifier_fresh_fallback(
-    sequent: &Sequent,
-    state: &BranchState,
-    rule_match: &RuleMatch,
-) -> Option<ScheduledRule> {
-    let key = quantified_occurrence_key(sequent, rule_match.side, rule_match.index)?;
-    let usage = state
-        .quantifier_usage
-        .get(&key)
-        .cloned()
-        .unwrap_or_default();
-    if usage.fresh_fallback_used {
-        return None;
+    if !scheduled.is_empty() {
+        return scheduled;
+    }
+
+    if usage.fresh_used {
+        return Vec::new();
     }
 
     let term = Term::Const(crate::ast::Symbol::User(fresh_branch_term_name(sequent)));
-
-    Some(match rule_match.rule {
+    scheduled.push(match rule_match.rule {
         Rule::ForAllL => ScheduledRule::ForAllL {
             rule_match: *rule_match,
             term,
@@ -157,8 +145,10 @@ fn schedule_quantifier_fresh_fallback(
             key,
             fresh_fallback: true,
         },
-        _ => return None,
-    })
+        _ => return Vec::new(),
+    });
+
+    scheduled
 }
 
 /// Builds a stable key for one quantified formula occurrence within a sequent.
