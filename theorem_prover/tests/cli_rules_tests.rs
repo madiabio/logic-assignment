@@ -573,3 +573,56 @@ fof(conj_1,conjecture,p).
         "stdout was:\n{stdout}"
     );
 }
+
+#[test]
+fn prove_subcommand_directory_summarizes_proof_statuses() {
+    let dir = make_temp_dir("prove_directory_status_summary");
+    write_problem_file(
+        &dir,
+        "provable.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+    write_problem_file(
+        &dir,
+        "not_provable.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,q).
+"#,
+    );
+    write_problem_file(
+        &dir,
+        "bad_parse.p",
+        r#"
+fof(ax_1,axiom,p)
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["prove", dir.to_str().expect("path should be utf-8")])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !output.status.success(),
+        "expected processing failure\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("Processed 3 file(s)"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("Provable: 1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Not provable: 1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Unknown: 0"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Timeout: 0"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("Failed to process: 1"),
+        "stdout was:\n{stdout}"
+    );
+}
