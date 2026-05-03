@@ -127,14 +127,18 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(
-        stdout.contains("kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms"),
+        stdout
+            .contains("kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms"),
         "stdout was:\n{stdout}"
     );
     assert!(
         stdout.contains("problem\t1\t1\tSYN001+1\t"),
         "stdout was:\n{stdout}"
     );
-    assert!(stdout.contains("\t1\t1\tProvable\t"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("\t1\t1\tProvable\t"),
+        "stdout was:\n{stdout}"
+    );
     assert!(
         stdout.contains("summary\t1\t0\t1\t0\t0\t0\t0\t0"),
         "stdout was:\n{stdout}"
@@ -283,14 +287,19 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(
-        stdout.contains("kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tsuccess\thad_rule_match"),
+        stdout.contains(
+            "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tsuccess\thad_rule_match"
+        ),
         "stdout was:\n{stdout}"
     );
     assert!(
         stdout.contains("problem\t1\t1\tSYN001+1\t"),
         "stdout was:\n{stdout}"
     );
-    assert!(stdout.contains("\t1\t1\ttrue\ttrue"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("\t1\t1\ttrue\ttrue"),
+        "stdout was:\n{stdout}"
+    );
     assert!(
         stdout.contains("summary\t1\t0\t1\t0\t1"),
         "stdout was:\n{stdout}"
@@ -1014,5 +1023,8 @@ fof(ax_1,axiom,p)
     assert!(stdout.contains("processed"), "stdout was:\n{stdout}");
     assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
     assert!(stdout.contains("not_provable"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("failed_to_process"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("failed_to_process"),
+        "stdout was:\n{stdout}"
+    );
 }

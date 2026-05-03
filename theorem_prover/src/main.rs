@@ -121,7 +121,9 @@ fn run_prover_mode(options: &ProveCommand) {
             match options.format {
                 OutputFormat::Human => print_prove_human_header(),
                 OutputFormat::Tsv => {
-                    println!("kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms")
+                    println!(
+                        "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms"
+                    )
                 }
             }
             let result = prove_file(
@@ -419,7 +421,10 @@ fn inspect_rules_paths(problem_runs: &[ProblemRun], options: &RulesCommand) {
             ]);
         }
         OutputFormat::Tsv => {
-            println!("summary\t{processed}\t{skipped}\t{}\t{failures}\t{matched_problems}", processed - failures);
+            println!(
+                "summary\t{processed}\t{skipped}\t{}\t{failures}\t{matched_problems}",
+                processed - failures
+            );
         }
     }
 
@@ -849,10 +854,12 @@ fn parse_subset_problem_line(line: &str) -> Option<(String, Option<SubsetStats>)
     }
 
     let subset_stats = match (tokens.get(5), tokens.get(8)) {
-        (Some(formulae), Some(atoms)) => match (formulae.parse::<usize>(), atoms.parse::<usize>()) {
-            (Ok(formulae), Ok(atoms)) => Some(SubsetStats { formulae, atoms }),
-            _ => None,
-        },
+        (Some(formulae), Some(atoms)) => {
+            match (formulae.parse::<usize>(), atoms.parse::<usize>()) {
+                (Ok(formulae), Ok(atoms)) => Some(SubsetStats { formulae, atoms }),
+                _ => None,
+            }
+        }
         _ => None,
     };
 
@@ -861,9 +868,7 @@ fn parse_subset_problem_line(line: &str) -> Option<(String, Option<SubsetStats>)
 
 fn resolve_tptp_problem_path(tptp_root: &Path, problem_id: &str) -> PathBuf {
     let domain = &problem_id[..3];
-    let problems_dir = tptp_root
-        .join("Problems")
-        .join(domain);
+    let problems_dir = tptp_root.join("Problems").join(domain);
     let exact_path = problems_dir.join(format!("{problem_id}.p"));
     if exact_path.exists() {
         return exact_path;
@@ -874,7 +879,9 @@ fn resolve_tptp_problem_path(tptp_root: &Path, problem_id: &str) -> PathBuf {
 }
 
 fn subset_stats_fields(stats: Option<SubsetStats>) -> (usize, usize) {
-    stats.map(|stats| (stats.formulae, stats.atoms)).unwrap_or((0, 0))
+    stats
+        .map(|stats| (stats.formulae, stats.atoms))
+        .unwrap_or((0, 0))
 }
 
 fn print_prove_human_header() {

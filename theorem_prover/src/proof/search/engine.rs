@@ -24,8 +24,8 @@ use crate::Sequent;
 use crate::proof::apply::{
     RuleApplication, apply_exists_r_with_term, apply_forall_l_with_term, apply_rule,
 };
-use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
 use crate::proof::quantifier::visible_terms_in_sequent;
+use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
 use crate::proof::search::scheduler::{ScheduledRule, schedule_next_rules};
 
 const DEFAULT_PROVE_TIMEOUT: Duration = Duration::from_secs(50);
@@ -196,9 +196,14 @@ fn backwards_search(
                 warn!("Not implemented rule.");
                 SearchOutcome::NotImplemented
             }
-            RuleApplication::Premises(premises) => {
-                prove_premises(&premises, deadline, &next_state, options, depth + 1, steps_taken)
-            }
+            RuleApplication::Premises(premises) => prove_premises(
+                &premises,
+                deadline,
+                &next_state,
+                options,
+                depth + 1,
+                steps_taken,
+            ),
             RuleApplication::Error => {
                 warn!("Error.");
                 SearchOutcome::Error
