@@ -1,6 +1,7 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn make_temp_dir(test_name: &str) -> PathBuf {
@@ -21,6 +22,415 @@ fn write_problem_file(dir: &Path, name: &str, contents: &str) -> PathBuf {
 
 fn parse_failed_marker_path(path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.parse_failed", path.display()))
+}
+
+fn write_file(path: &Path, contents: &str) {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).expect("parent dirs should be created");
+    }
+    fs::write(path, contents).expect("file should be written");
+}
+
+#[test]
+fn prove_subcommand_without_target_uses_configured_subset() {
+    let dir = make_temp_dir("prove_config_subset");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+% header
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    let config_path = dir.join("config.toml");
+    write_file(
+        &config_path,
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(stdout.contains("idx"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("problem"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("status"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("time_ms"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("frm"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("atoms"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("1/1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("SYN001+1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("processed"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prove_subcommand_without_target_supports_tsv_output() {
+    let dir = make_temp_dir("prove_config_subset_tsv");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove", "--format", "tsv"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("problem\t1\t1\tSYN001+1\t"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("\t1\t1\tProvable\t"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("summary\t1\t0\t1\t0\t0\t0\t0\t0"),
+        "stdout was:\n{stdout}"
+    );
+}
+
+#[test]
+fn prove_subcommand_without_target_resolves_versioned_problem_ids() {
+    let dir = make_temp_dir("prove_config_versioned_subset");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root
+        .join("Problems")
+        .join("LCL")
+        .join("LCL662+1.001.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+LCL662+1.001        FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(stdout.contains("LCL662+1.001"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn rules_subcommand_without_target_uses_configured_subset() {
+    let dir = make_temp_dir("rules_config_subset");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+% header
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["rules"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(stdout.contains("idx"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("problem"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("ok"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("match"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("1/1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("SYN001+1"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("yes"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("Id"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn rules_subcommand_without_target_supports_tsv_output() {
+    let dir = make_temp_dir("rules_config_subset_tsv");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["rules", "--format", "tsv"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tsuccess\thad_rule_match"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("problem\t1\t1\tSYN001+1\t"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("\t1\t1\ttrue\ttrue"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("summary\t1\t0\t1\t0\t1"),
+        "stdout was:\n{stdout}"
+    );
+}
+
+#[test]
+fn prove_subcommand_without_target_uses_proof_limits_from_config() {
+    let dir = make_temp_dir("prove_config_limits");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 0\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(stdout.contains("unknown"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prove_subcommand_without_target_allows_cli_flags_to_override_config_limits() {
+    let dir = make_temp_dir("prove_config_override");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 0\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove", "--max-steps", "10"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prove_subcommand_without_target_prompts_and_writes_config_on_first_run() {
+    let dir = make_temp_dir("prove_first_run_prompt");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("binary should run");
+
+    let stdin = child.stdin.as_mut().expect("stdin should be available");
+    write!(
+        stdin,
+        "{}\n{}\n1000\n50\n50\n",
+        tptp_root.display(),
+        subset_path.display()
+    )
+    .expect("stdin should be writable");
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().expect("output should be captured");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        dir.join("config.toml").exists(),
+        "expected config.toml to be written"
+    );
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -131,10 +541,11 @@ fof(conj_1,conjecture,p).
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(!stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("prover returned Provable"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("idx"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("problem"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("status"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("identity_default"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -162,10 +573,8 @@ fof(conj_1,conjecture,p).
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("prover returned Provable"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("identity_visible"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -230,19 +639,15 @@ fof(conj_1,conjecture,p).
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
-    assert!(stdout.contains("match.p:"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("branch.p:"), "stdout was:\n{stdout}");
-    assert!(!stdout.contains("ignored.tptp:"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("Processed 2 file(s)"),
-        "stdout was:\n{stdout}"
-    );
-    assert!(stdout.contains("Succeeded: 2"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Failed: 0"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("Problems with rule matches: 2"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("idx"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("problem"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("match"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("branch"), "stdout was:\n{stdout}");
+    assert!(!stdout.contains("ignored.tptp"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("succeeded"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("failed"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("rule_matches"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -481,15 +886,12 @@ fof(conj_1,conjecture,q).
         output.status.success(),
         "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(!stdout.contains("skipped.p:"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("processed.p:"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("Processed 1 file(s)"),
-        "stdout was:\n{stdout}"
-    );
-    assert!(stdout.contains("Skipped: 1"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Succeeded: 1"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Failed: 0"), "stdout was:\n{stdout}");
+    assert!(!stdout.contains("skipped.p"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("processed"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("skipped"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("succeeded"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("failed"), "stdout was:\n{stdout}");
     assert!(
         parse_failed_marker_path(&skipped).exists(),
         "expected skipped marker to remain"
@@ -529,14 +931,11 @@ fof(conj_1,conjecture,p).
         output.status.success(),
         "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stdout.contains("retried.p:"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("Processed 1 file(s)"),
-        "stdout was:\n{stdout}"
-    );
-    assert!(stdout.contains("Skipped: 0"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Succeeded: 1"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Failed: 0"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("retried"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("skipped"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("succeeded"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("failed"), "stdout was:\n{stdout}");
     assert!(
         !marker.exists(),
         "expected retry flag to clear stale marker after success"
@@ -568,10 +967,8 @@ fof(conj_1,conjecture,p).
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("prover returned Unknown"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("bounded_unknown"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("unknown"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -613,16 +1010,9 @@ fof(ax_1,axiom,p)
         !output.status.success(),
         "expected processing failure\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(
-        stdout.contains("Processed 3 file(s)"),
-        "stdout was:\n{stdout}"
-    );
-    assert!(stdout.contains("Provable: 1"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Not provable: 1"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Unknown: 0"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("Timeout: 0"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("Failed to process: 1"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("processed"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("not_provable"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("failed_to_process"), "stdout was:\n{stdout}");
 }

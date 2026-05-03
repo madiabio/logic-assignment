@@ -1,0 +1,5 @@
+tptp_root = 
+default_subset_file =
+timeout_ms =
+max_depth =
+max_steps =
