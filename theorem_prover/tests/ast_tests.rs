@@ -29,13 +29,41 @@ fn predicate_with_args(name: &str, args: Vec<Term>) -> Atom {
 }
 
 fn atom_formula(name: &str) -> Formula {
-    Formula::Atom(predicate(name))
+    Formula::atom(name)
+}
+
+#[test]
+fn formula_constructors_build_expected_ast_shapes() {
+    assert_eq!(Formula::atom("p"), atom_formula("p"));
+    assert_eq!(
+        Formula::predicate("p", vec![variable("X"), constant("a")]),
+        Formula::Atom(predicate_with_args("p", vec![variable("X"), constant("a")]))
+    );
+    assert_eq!(
+        Formula::not(atom_formula("p")),
+        Formula::Not(Box::new(atom_formula("p")))
+    );
+    assert_eq!(
+        Formula::and(vec![atom_formula("p"), atom_formula("q")]),
+        Formula::And(vec![atom_formula("p"), atom_formula("q")])
+    );
+    assert_eq!(
+        Formula::or(vec![atom_formula("p"), atom_formula("q")]),
+        Formula::Or(vec![atom_formula("p"), atom_formula("q")])
+    );
+    assert_eq!(
+        Formula::implies(atom_formula("p"), atom_formula("q")),
+        Formula::Implies(Box::new(atom_formula("p")), Box::new(atom_formula("q")))
+    );
 }
 
 #[test]
 fn symbols_display_as_stored() {
     assert_eq!(format!("{}", Symbol::User("p".to_owned())), "p");
-    assert_eq!(format!("{}", Symbol::Defined("$trueish".to_owned())), "$trueish");
+    assert_eq!(
+        format!("{}", Symbol::Defined("$trueish".to_owned())),
+        "$trueish"
+    );
     assert_eq!(format!("{}", Symbol::System("$$sys".to_owned())), "$$sys");
 }
 
@@ -82,19 +110,14 @@ fn terms_display_all_variants() {
 }
 
 #[test]
-fn atoms_display_predicates_and_equalities() {
+fn atoms_display_predicates() {
     assert_eq!(format!("{}", predicate("p")), "p");
     assert_eq!(
-        format!("{}", predicate_with_args("p", vec![variable("X"), constant("a")])),
+        format!(
+            "{}",
+            predicate_with_args("p", vec![variable("X"), constant("a")])
+        ),
         "p(X, a)"
-    );
-    assert_eq!(
-        format!("{}", Atom::Equality(constant("a"), constant("b"))),
-        "a = b"
-    );
-    assert_eq!(
-        format!("{}", Atom::Inequality(constant("a"), constant("b"))),
-        "a != b"
     );
 }
 
@@ -103,14 +126,11 @@ fn formulas_display_atoms_constants_and_quantifiers() {
     assert_eq!(format!("{}", Formula::True), "⊤");
     assert_eq!(format!("{}", Formula::False), "⊥");
     assert_eq!(format!("{}", atom_formula("p")), "p");
-    assert_eq!(
-        format!("{}", Formula::Not(Box::new(atom_formula("p")))),
-        "¬p"
-    );
+    assert_eq!(format!("{}", Formula::not(atom_formula("p"))), "¬p");
     assert_eq!(
         format!(
             "{}",
-            Formula::Not(Box::new(Formula::And(vec![atom_formula("p"), atom_formula("q")])))
+            Formula::not(Formula::and(vec![atom_formula("p"), atom_formula("q")]))
         ),
         "¬(p ∧ q)"
     );
@@ -144,27 +164,31 @@ fn formulas_display_connectives_with_precedence() {
     assert_eq!(
         format!(
             "{}",
-            Formula::And(vec![atom_formula("p"), atom_formula("q"), atom_formula("r")])
+            Formula::and(vec![
+                atom_formula("p"),
+                atom_formula("q"),
+                atom_formula("r")
+            ])
         ),
         "p ∧ q ∧ r"
     );
     assert_eq!(
-        format!("{}", Formula::Or(vec![atom_formula("p"), atom_formula("q")])),
+        format!(
+            "{}",
+            Formula::or(vec![atom_formula("p"), atom_formula("q")])
+        ),
         "p ∨ q"
     );
     assert_eq!(
-        format!(
-            "{}",
-            Formula::Implies(Box::new(atom_formula("p")), Box::new(atom_formula("q")))
-        ),
+        format!("{}", Formula::implies(atom_formula("p"), atom_formula("q"))),
         "p ⇒ q"
     );
     assert_eq!(
         format!(
             "{}",
-            Formula::Implies(
-                Box::new(Formula::And(vec![atom_formula("p"), atom_formula("q")])),
-                Box::new(atom_formula("r"))
+            Formula::implies(
+                Formula::and(vec![atom_formula("p"), atom_formula("q")]),
+                atom_formula("r")
             )
         ),
         "p ∧ q ⇒ r"
@@ -172,22 +196,12 @@ fn formulas_display_connectives_with_precedence() {
     assert_eq!(
         format!(
             "{}",
-            Formula::And(vec![
+            Formula::and(vec![
                 atom_formula("p"),
-                Formula::Implies(Box::new(atom_formula("q")), Box::new(atom_formula("r")))
+                Formula::implies(atom_formula("q"), atom_formula("r"))
             ])
         ),
         "p ∧ (q ⇒ r)"
-    );
-    assert_eq!(
-        format!(
-            "{}",
-            Formula::Iff(
-                Box::new(Formula::Not(Box::new(atom_formula("p")))),
-                Box::new(atom_formula("q"))
-            )
-        ),
-        "¬p ⇔ q"
     );
     assert_eq!(
         format!(
@@ -232,17 +246,60 @@ fn formulas_parenthesize_ambiguous_binary_nesting() {
         ),
         "p ⇒ q ⇒ r"
     );
+}
+
+#[test]
+fn term_substitution_replaces_variables_inside_nested_function_arguments() {
+    let term = Term::Fun {
+        name: Symbol::User("f".to_owned()),
+        args: vec![
+            variable("X"),
+            Term::Fun {
+                name: Symbol::User("g".to_owned()),
+                args: vec![variable("X"), constant("a")],
+            },
+        ],
+    };
+
     assert_eq!(
-        format!(
-            "{}",
-            Formula::Iff(
-                Box::new(atom_formula("p")),
-                Box::new(Formula::Iff(
-                    Box::new(atom_formula("q")),
-                    Box::new(atom_formula("r"))
-                ))
-            )
-        ),
-        "p ⇔ (q ⇔ r)"
+        term.substitute_var("X", &constant("b")),
+        Term::Fun {
+            name: Symbol::User("f".to_owned()),
+            args: vec![
+                constant("b"),
+                Term::Fun {
+                    name: Symbol::User("g".to_owned()),
+                    args: vec![constant("b"), constant("a")],
+                },
+            ],
+        }
+    );
+}
+
+#[test]
+fn formula_substitution_stops_at_shadowing_quantifier() {
+    let formula = Formula::ForAll(
+        vec![var("X")],
+        Box::new(Formula::and(vec![
+            Formula::predicate("p", vec![variable("X")]),
+            Formula::Exists(
+                vec![var("X")],
+                Box::new(Formula::predicate("q", vec![variable("X")])),
+            ),
+        ])),
+    );
+
+    assert_eq!(
+        formula.substitute_var("X", &constant("a")),
+        Formula::ForAll(
+            vec![var("X")],
+            Box::new(Formula::and(vec![
+                Formula::predicate("p", vec![variable("X")]),
+                Formula::Exists(
+                    vec![var("X")],
+                    Box::new(Formula::predicate("q", vec![variable("X")])),
+                ),
+            ]))
+        )
     );
 }

@@ -1,11 +1,5 @@
-use std::fs;
-
 use theorem_prover::ast::{Atom, Formula, NumberLit, Symbol, Term};
 use theorem_prover::{ParsedProblem, parse_problem, parse_tptp};
-
-fn read_problem(path: &str) -> String {
-    fs::read_to_string(path).expect("failed to read problem file")
-}
 
 fn premise_formula<'a>(parsed: &'a ParsedProblem, name: &str) -> &'a Formula {
     &parsed
@@ -25,11 +19,16 @@ fn first_premise_formula(parsed: &ParsedProblem) -> &Formula {
 }
 
 #[test]
-fn parses_syn000_assignment_subset() {
-    let input = read_problem("../tptp_problems/SYN000+1.p");
-    parse_tptp(&input).expect("SYN000+1.p should parse");
+fn parses_supported_assignment_subset() {
+    let input = r#"
+fof(true_false,axiom,($true | $false)).
+fof(single_quoted,axiom,('A proposition' | 'A predicate'(X))).
+fof(useful_connectives,axiom,(! [X] : (p(X) => ? [Y] : (q(Y) & r(X,Y))))).
+"#;
+    parse_tptp(input).expect("supported assignment subset should parse");
 
-    let parsed = parse_problem(&input).expect("SYN000+1.p should build AST records");
+    let parsed =
+        parse_problem(input).expect("supported assignment subset should build AST records");
 
     match premise_formula(&parsed, "true_false") {
         Formula::Or(items) => assert_eq!(items, &vec![Formula::True, Formula::False]),
@@ -57,118 +56,22 @@ fn parses_syn000_assignment_subset() {
         other => panic!("expected quoted symbol disjunction, got {other:?}"),
     }
 
-    match premise_formula(&parsed, "equality") {
-        Formula::Exists(vars, body) => {
-            assert_eq!(vars.len(), 1);
-            match body.as_ref() {
-                Formula::ForAll(inner_vars, inner_body) => {
-                    assert_eq!(inner_vars.len(), 2);
-                    match inner_body.as_ref() {
-                        Formula::Or(items) => {
-                            assert_eq!(items.len(), 3);
-                            assert!(matches!(items[0], Formula::Atom(Atom::Equality(_, _))));
-                            assert!(matches!(items[1], Formula::Atom(Atom::Inequality(_, _))));
-                            assert!(matches!(items[2], Formula::Atom(Atom::Equality(_, _))));
-                        }
-                        other => panic!("expected equality body to normalize as Or, got {other:?}"),
-                    }
-                }
-                other => panic!("expected nested universal quantifier, got {other:?}"),
-            }
-        }
-        other => panic!("expected existential quantifier at top level, got {other:?}"),
-    }
-
     match premise_formula(&parsed, "useful_connectives") {
         Formula::ForAll(_, body) => match body.as_ref() {
-            Formula::Iff(left, right) => {
-                assert!(matches!(left.as_ref(), Formula::Implies(_, _)));
+            Formula::Implies(left, right) => {
+                assert!(matches!(left.as_ref(), Formula::Atom(_)));
                 assert!(matches!(right.as_ref(), Formula::Exists(_, _)));
             }
-            other => panic!("expected top-level iff in useful_connectives, got {other:?}"),
+            other => panic!("expected top-level implication in useful_connectives, got {other:?}"),
         },
         other => panic!("expected universal quantifier in useful_connectives, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_syn001_biconditional_problem() {
-    let input = read_problem("../tptp_problems/SYN001+1.p");
-    parse_tptp(&input).expect("SYN001+1.p should parse");
-
-    let parsed = parse_problem(&input).expect("SYN001+1.p should build AST records");
-    let conjecture = parsed
-        .conjecture
-        .as_ref()
-        .expect("SYN001+1.p should have conjecture");
-
-    match &conjecture.formula {
-        Formula::Iff(left, right) => {
-            assert!(matches!(left.as_ref(), Formula::Not(_)));
-            assert!(matches!(right.as_ref(), Formula::Atom(_)));
-        }
-        other => panic!("expected conjecture to be Iff, got {other:?}"),
-    }
-}
-
-#[test]
-fn parses_later_quantified_problem() {
-    let input = read_problem("../tptp_problems/SYN036+1.p");
-    parse_tptp(&input).expect("SYN036+1.p should parse");
-
-    let parsed = parse_problem(&input).expect("SYN036+1.p should build AST records");
-    let conjecture = parsed
-        .conjecture
-        .as_ref()
-        .expect("SYN036+1.p should have conjecture");
-
-    match &conjecture.formula {
-        Formula::Iff(left, right) => {
-            assert!(matches!(left.as_ref(), Formula::Iff(_, _)));
-            assert!(matches!(right.as_ref(), Formula::Iff(_, _)));
-        }
-        other => panic!("expected SYN036 conjecture to be nested iff tree, got {other:?}"),
-    }
-}
-
-#[test]
-fn lowers_reverse_implication_for_lte() {
-    let parsed = parse_problem("fof(lte,axiom,(p <= q)).").expect("formula should parse");
-
-    match first_premise_formula(&parsed) {
-        Formula::Implies(left, right) => {
-            assert!(matches!(
-                left.as_ref(),
-                Formula::Atom(Atom::Predicate {
-                    name: Symbol::User(name),
-                    ..
-                }) if name == "q"
-            ));
-            assert!(matches!(
-                right.as_ref(),
-                Formula::Atom(Atom::Predicate {
-                    name: Symbol::User(name),
-                    ..
-                }) if name == "p"
-            ));
-        }
-        other => panic!("expected <= to lower to reversed implication, got {other:?}"),
-    }
-}
-
-#[test]
-fn lowers_exclusive_biconditional_to_negated_iff() {
-    let parsed = parse_problem("fof(xor_like,axiom,(p <~> q)).").expect("formula should parse");
-
-    match first_premise_formula(&parsed) {
-        Formula::Not(body) => assert!(matches!(body.as_ref(), Formula::Iff(_, _))),
-        other => panic!("expected <~> to lower to Not(Iff(..)), got {other:?}"),
-    }
-}
-
-#[test]
 fn flattens_and_chain_into_single_vector() {
-    let parsed = parse_problem("fof(and_chain,axiom,(p & q & r & s)).").expect("formula should parse");
+    let parsed =
+        parse_problem("fof(and_chain,axiom,(p & q & r & s)).").expect("formula should parse");
 
     match first_premise_formula(&parsed) {
         Formula::And(items) => {
@@ -209,13 +112,48 @@ fn parses_mixed_binary_connectives_with_tptp_left_association() {
             }
             assert!(matches!(items[1], Formula::Atom(_)));
         }
-        other => panic!(
-            "expected TPTP left-associated shape ((p & q) | r) & s, got {other:?}"
-        ),
+        other => panic!("expected TPTP left-associated shape ((p & q) | r) & s, got {other:?}"),
     }
 }
 
 #[test]
+fn rewrites_iff_into_conjunction_of_implications() {
+    let parsed = parse_problem("fof(iff_rule,axiom,(p <=> q)).").expect("formula should parse");
+
+    match first_premise_formula(&parsed) {
+        Formula::And(items) => {
+            assert_eq!(items.len(), 2);
+            assert_eq!(
+                items[0],
+                Formula::Implies(
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("p".to_owned()),
+                        args: vec![],
+                    })),
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("q".to_owned()),
+                        args: vec![],
+                    })),
+                )
+            );
+            assert_eq!(
+                items[1],
+                Formula::Implies(
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("q".to_owned()),
+                        args: vec![],
+                    })),
+                    Box::new(Formula::Atom(Atom::Predicate {
+                        name: Symbol::User("p".to_owned()),
+                        args: vec![],
+                    })),
+                )
+            );
+        }
+        other => panic!("expected iff to rewrite to conjunction of implications, got {other:?}"),
+    }
+}
+
 fn maps_true_false_constants_to_formula_variants() {
     let parsed = parse_problem("fof(tf,axiom,($true | $false)).").expect("formula should parse");
 
@@ -254,25 +192,26 @@ fn classifies_user_defined_and_system_symbols() {
         other => panic!("expected conjunction over user symbols, got {other:?}"),
     }
 
-    let parsed = parse_problem("fof(defsys,axiom,($d = $$s)).").expect("formula should parse");
+    let parsed = parse_problem("fof(defsys,axiom,$$sys($d)).").expect("formula should parse");
     match first_premise_formula(&parsed) {
-        Formula::Atom(Atom::Equality(lhs, rhs)) => {
-            assert!(matches!(lhs, Term::Const(Symbol::Defined(value)) if value == "$d"));
-            assert!(matches!(rhs, Term::Const(Symbol::System(value)) if value == "$$s"));
+        Formula::Atom(Atom::Predicate { name, args }) => {
+            assert!(matches!(name, Symbol::System(value) if value == "$$sys"));
+            assert_eq!(args.len(), 1);
+            assert!(matches!(args[0], Term::Const(Symbol::Defined(ref value)) if value == "$d"));
         }
-        other => panic!("expected equality between defined/system constants, got {other:?}"),
+        other => panic!("expected system predicate over defined constant, got {other:?}"),
     }
 }
 
 #[test]
 fn preserves_number_and_distinct_object_terms() {
-    let parsed = parse_problem("fof(nums,axiom,($$sys(3,2/5,-1.2,\"obj\") = f(7))).")
+    let parsed = parse_problem("fof(nums,axiom,$$sys(3,2/5,-1.2,\"obj\",f(7))).")
         .expect("numeric/system term formula should parse");
 
     match first_premise_formula(&parsed) {
-        Formula::Atom(Atom::Equality(Term::Fun { name, args }, rhs)) => {
+        Formula::Atom(Atom::Predicate { name, args }) => {
             assert!(matches!(name, Symbol::System(value) if value == "$$sys"));
-            assert_eq!(args.len(), 4);
+            assert_eq!(args.len(), 5);
             assert!(matches!(
                 args[0],
                 Term::Number(NumberLit::Integer(ref value)) if value == "3"
@@ -286,9 +225,9 @@ fn preserves_number_and_distinct_object_terms() {
                 Term::Number(NumberLit::Real(ref value)) if value == "-1.2"
             ));
             assert!(matches!(args[3], Term::DistinctObject(ref obj) if obj == "\"obj\""));
-            assert!(matches!(rhs, Term::Fun { .. }));
+            assert!(matches!(args[4], Term::Fun { .. }));
         }
-        other => panic!("expected equality over system functor term, got {other:?}"),
+        other => panic!("expected system predicate over mixed term arguments, got {other:?}"),
     }
 }
 
@@ -316,38 +255,6 @@ fof(lem_1,lemma,s).
 }
 
 #[test]
-fn separates_premises_from_conjecture_in_syn000() {
-    let input = read_problem("../tptp_problems/SYN000+1.p");
-    let parsed = parse_problem(&input).expect("SYN000+1.p should parse into problem structure");
-
-    assert_eq!(parsed.premises.len(), 8);
-    assert_eq!(
-        parsed
-            .premises
-            .iter()
-            .map(|record| record.role.as_str())
-            .collect::<Vec<_>>(),
-        vec![
-            "axiom",
-            "axiom",
-            "axiom",
-            "axiom",
-            "axiom",
-            "axiom",
-            "axiom",
-            "hypothesis"
-        ]
-    );
-
-    let conjecture = parsed
-        .conjecture
-        .as_ref()
-        .expect("conjecture should be captured separately");
-    assert_eq!(conjecture.name, "role_conjecture");
-    assert!(matches!(conjecture.formula, Formula::Exists(_, _)));
-}
-
-#[test]
 fn rejects_malformed_formula_syntax() {
     let input = "fof(bad,axiom,(p(a)).";
     assert!(parse_tptp(input).is_err());
@@ -363,9 +270,28 @@ fn rejects_malformed_quantifier_variable_list() {
 
 #[test]
 fn rejects_malformed_numeric_literal_shape() {
-    let input = "fof(bad_num,axiom,(f(1E) = a)).";
+    let input = "fof(bad_num,axiom,f(1E)).";
     assert!(parse_tptp(input).is_err());
     assert!(parse_problem(input).is_err());
+}
+
+#[test]
+fn rejects_removed_connectives_and_equality_syntax() {
+    for input in [
+        "fof(bad_xor,axiom,(p <~> q)).",
+        "fof(bad_lte,axiom,(p <= q)).",
+        "fof(bad_eq,axiom,(a = b)).",
+        "fof(bad_neq,axiom,(a != b)).",
+    ] {
+        assert!(
+            parse_tptp(input).is_err(),
+            "input should be rejected: {input}"
+        );
+        assert!(
+            parse_problem(input).is_err(),
+            "problem should be rejected: {input}"
+        );
+    }
 }
 
 #[test]

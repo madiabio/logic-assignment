@@ -20,9 +20,7 @@ pub fn build_formula(pair: Pair<'_, Rule>) -> Formula {
             build_formula(inner)
         }
         Rule::fof_unary_formula => build_unary_formula(pair),
-        Rule::fof_infix_unary => build_inequality(pair),
         Rule::fof_quantified_formula => build_quantified_formula(pair),
-        Rule::fof_defined_infix_formula => build_equality(pair),
         Rule::fof_plain_term => predicate_from_term_rule(pair),
         Rule::fof_defined_plain_term => predicate_from_defined_plain_term(pair),
         Rule::fof_system_term => predicate_from_system_term(pair),
@@ -98,7 +96,6 @@ fn build_unary_formula(pair: Pair<'_, Rule>) -> Formula {
                 .expect("unary connective should be followed by formula");
             Formula::Not(Box::new(build_formula(rhs)))
         }
-        Rule::fof_infix_unary => build_inequality(first),
         _ => panic!("unexpected unary formula shape: {:?}", first.as_rule()),
     }
 }
@@ -130,24 +127,6 @@ fn build_quantified_formula(pair: Pair<'_, Rule>) -> Formula {
         "?" => Formula::Exists(variables, Box::new(body)),
         _ => panic!("unexpected quantifier: {quantifier}"),
     }
-}
-
-fn build_equality(pair: Pair<'_, Rule>) -> Formula {
-    let mut inner = pair.into_inner();
-    let lhs = build_term(inner.next().expect("equality lhs term missing"));
-    let _eq = inner.next().expect("equality operator missing");
-    let rhs = build_term(inner.next().expect("equality rhs term missing"));
-
-    Formula::Atom(Atom::Equality(lhs, rhs))
-}
-
-fn build_inequality(pair: Pair<'_, Rule>) -> Formula {
-    let mut inner = pair.into_inner();
-    let lhs = build_term(inner.next().expect("inequality lhs term missing"));
-    let _neq = inner.next().expect("inequality operator missing");
-    let rhs = build_term(inner.next().expect("inequality rhs term missing"));
-
-    Formula::Atom(Atom::Inequality(lhs, rhs))
 }
 
 fn predicate_from_term_rule(pair: Pair<'_, Rule>) -> Formula {
@@ -347,9 +326,10 @@ fn combine_binary(left: Formula, operator: &str, right: Formula) -> Formula {
         "&" => merge_associative(left, right, true),
         "|" => merge_associative(left, right, false),
         "=>" => Formula::Implies(Box::new(left), Box::new(right)),
-        "<=" => Formula::Implies(Box::new(right), Box::new(left)),
-        "<=>" => Formula::Iff(Box::new(left), Box::new(right)),
-        "<~>" => Formula::Not(Box::new(Formula::Iff(Box::new(left), Box::new(right)))),
+        "<=>" => Formula::And(vec![
+            Formula::Implies(Box::new(left.clone()), Box::new(right.clone())),
+            Formula::Implies(Box::new(right), Box::new(left)),
+        ]),
         _ => panic!("unsupported binary connective: {operator}"),
     }
 }

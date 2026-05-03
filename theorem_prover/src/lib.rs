@@ -1,10 +1,9 @@
 pub mod ast;
-pub mod pipeline;
 pub mod parser;
-pub mod prover;
-pub mod sequent;
+pub mod pipeline;
+pub mod proof;
 
-pub use pipeline::*;
 pub use parser::{FormulaRecord, ParsedProblem, parse_problem, parse_tptp};
-pub use prover::*;
-pub use sequent::*;
+pub use pipeline::*;
+pub use proof::prover::*;
+pub use proof::sequent::*;

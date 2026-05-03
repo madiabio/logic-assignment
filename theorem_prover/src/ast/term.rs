@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Term {
     Var(Var),
     Const(Symbol),
@@ -9,21 +9,21 @@ pub enum Term {
     DistinctObject(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NumberLit {
     Integer(String),
     Rational(String),
     Real(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Symbol {
     User(String),
     Defined(String),
     System(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Var {
     pub name: String,
 }
@@ -71,6 +71,23 @@ impl fmt::Display for Term {
             }
             Term::Number(number) => write!(f, "{number}"),
             Term::DistinctObject(value) => f.write_str(value),
+        }
+    }
+}
+
+impl Term {
+    pub fn substitute_var(&self, variable_name: &str, replacement: &Term) -> Self {
+        match self {
+            Term::Var(var) if var.name == variable_name => replacement.clone(),
+            Term::Var(_) => self.clone(),
+            Term::Const(_) | Term::Number(_) | Term::DistinctObject(_) => self.clone(),
+            Term::Fun { name, args } => Term::Fun {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| arg.substitute_var(variable_name, replacement))
+                    .collect(),
+            },
         }
     }
 }

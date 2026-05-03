@@ -1,11 +1,8 @@
-use theorem_prover::ast::{Atom, Formula, Symbol};
+use theorem_prover::ast::Formula;
 use theorem_prover::{FormulaRecord, ParsedProblem, Sequent, SequentBuildError};
 
 fn predicate_formula(name: &str) -> Formula {
-    Formula::Atom(Atom::Predicate {
-        name: Symbol::User(name.to_owned()),
-        args: Vec::new(),
-    })
+    Formula::atom(name)
 }
 
 fn formula_record(name: &str, role: &str, formula: Formula) -> FormulaRecord {
@@ -125,7 +122,10 @@ fn displays_nested_formulas_inside_sequents() {
         ),
     ]);
     let right = Formula::Implies(
-        Box::new(Formula::And(vec![predicate_formula("s"), predicate_formula("t")])),
+        Box::new(Formula::And(vec![
+            predicate_formula("s"),
+            predicate_formula("t"),
+        ])),
         Box::new(predicate_formula("u")),
     );
 

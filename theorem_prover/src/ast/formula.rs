@@ -9,7 +9,6 @@ pub enum Formula {
     And(Vec<Formula>),
     Or(Vec<Formula>),
     Implies(Box<Formula>, Box<Formula>),
-    Iff(Box<Formula>, Box<Formula>),
     ForAll(Vec<Var>, Box<Formula>),
     Exists(Vec<Var>, Box<Formula>),
 }
@@ -17,18 +16,43 @@ pub enum Formula {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Atom {
     Predicate { name: Symbol, args: Vec<Term> },
-    Equality(Term, Term),
-    Inequality(Term, Term),
 }
 
 use crate::ast::term::{Symbol, Term, Var};
 
 impl Formula {
+    pub fn atom(name: &str) -> Self {
+        Self::predicate(name, Vec::new())
+    }
+
+    pub fn predicate(name: &str, args: Vec<Term>) -> Self {
+        Self::Atom(Atom::Predicate {
+            name: Symbol::User(name.to_owned()),
+            args,
+        })
+    }
+
+    pub fn not(inner: Formula) -> Self {
+        Self::Not(Box::new(inner))
+    }
+
+    pub fn and(items: Vec<Formula>) -> Self {
+        Self::And(items)
+    }
+
+    pub fn or(items: Vec<Formula>) -> Self {
+        Self::Or(items)
+    }
+
+    pub fn implies(left: Formula, right: Formula) -> Self {
+        Self::Implies(Box::new(left), Box::new(right))
+    }
+
     fn precedence(&self) -> u8 {
         match self {
             Formula::True | Formula::False | Formula::Atom(_) => 3,
             Formula::ForAll(_, _) | Formula::Exists(_, _) | Formula::Not(_) => 2,
-            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _) | Formula::Iff(_, _) => 1,
+            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _) => 1,
         }
     }
 
@@ -86,11 +110,6 @@ impl Formula {
                 f.write_str(" ⇒ ")?;
                 right.fmt_with_parent(f, Some(my_precedence), right.is_binary())?;
             }
-            Formula::Iff(left, right) => {
-                left.fmt_with_parent(f, Some(my_precedence), false)?;
-                f.write_str(" ⇔ ")?;
-                right.fmt_with_parent(f, Some(my_precedence), right.is_binary())?;
-            }
             Formula::ForAll(vars, body) => {
                 f.write_str("∀")?;
                 for (index, var) in vars.iter().enumerate() {
@@ -125,8 +144,60 @@ impl Formula {
     fn is_binary(&self) -> bool {
         matches!(
             self,
-            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _) | Formula::Iff(_, _)
+            Formula::And(_) | Formula::Or(_) | Formula::Implies(_, _)
         )
+    }
+
+    pub fn substitute_var(&self, variable_name: &str, replacement: &Term) -> Self {
+        match self {
+            Formula::True | Formula::False => self.clone(),
+            Formula::Atom(Atom::Predicate { name, args }) => Formula::Atom(Atom::Predicate {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| arg.substitute_var(variable_name, replacement))
+                    .collect(),
+            }),
+            Formula::Not(inner) => {
+                Formula::Not(Box::new(inner.substitute_var(variable_name, replacement)))
+            }
+            Formula::And(items) => Formula::And(
+                items
+                    .iter()
+                    .map(|item| item.substitute_var(variable_name, replacement))
+                    .collect(),
+            ),
+            Formula::Or(items) => Formula::Or(
+                items
+                    .iter()
+                    .map(|item| item.substitute_var(variable_name, replacement))
+                    .collect(),
+            ),
+            Formula::Implies(left, right) => Formula::Implies(
+                Box::new(left.substitute_var(variable_name, replacement)),
+                Box::new(right.substitute_var(variable_name, replacement)),
+            ),
+            Formula::ForAll(vars, body) => {
+                if vars.iter().any(|var| var.name == variable_name) {
+                    self.clone()
+                } else {
+                    Formula::ForAll(
+                        vars.clone(),
+                        Box::new(body.substitute_var(variable_name, replacement)),
+                    )
+                }
+            }
+            Formula::Exists(vars, body) => {
+                if vars.iter().any(|var| var.name == variable_name) {
+                    self.clone()
+                } else {
+                    Formula::Exists(
+                        vars.clone(),
+                        Box::new(body.substitute_var(variable_name, replacement)),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -147,8 +218,6 @@ impl fmt::Display for Atom {
                 }
                 Ok(())
             }
-            Atom::Equality(left, right) => write!(f, "{left} = {right}"),
-            Atom::Inequality(left, right) => write!(f, "{left} != {right}"),
         }
     }
 }
