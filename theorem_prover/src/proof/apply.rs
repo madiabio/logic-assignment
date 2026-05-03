@@ -1,7 +1,9 @@
 // Implements the logic to apply a rule on a sequent.
-use std::collections::BTreeSet;
-
-use crate::ast::{Atom, Formula, Symbol, Term};
+use crate::ast::{Formula, Symbol, Term};
+use crate::proof::quantifier::{
+    fresh_branch_term_name, fresh_eigenconstant_name, instantiate_quantified_formula,
+    instantiate_quantified_formula_with_term, visible_terms_in_sequent,
+};
 use crate::proof::rules::Rule;
 use crate::proof::rules::RuleMatch;
 use crate::proof::sequent::Sequent;
@@ -25,6 +27,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::ImpliesR => apply_implies_r(sequent, rule_match.index),
         Rule::NotL => apply_not_l(sequent, rule_match.index),
         Rule::NotR => apply_not_r(sequent, rule_match.index),
+        Rule::ForAllL => apply_forall_l(sequent, rule_match.index),
         Rule::ForAllR => apply_forall_r(sequent, rule_match.index),
         Rule::ExistsL => apply_exists_l(sequent, rule_match.index),
         Rule::ExistsR => apply_exists_r(sequent, rule_match.index),
@@ -33,9 +36,19 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::AndR => apply_and_r(sequent, rule_match.index),
         Rule::OrL => apply_or_l(sequent, rule_match.index),
         Rule::ImpliesL => apply_implies_l(sequent, rule_match.index),
-
-        _ => RuleApplication::NotImplemented,
     }
+}
+
+fn apply_forall_l(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(term) = visible_terms_in_sequent(sequent)
+        .into_iter()
+        .next()
+        .or_else(|| Some(Term::Const(Symbol::User(fresh_branch_term_name(sequent)))))
+    else {
+        return RuleApplication::Error;
+    };
+
+    apply_forall_l_with_term(sequent, index, &term)
 }
 
 fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
@@ -281,6 +294,32 @@ fn apply_forall_r(sequent: &Sequent, index: usize) -> RuleApplication {
     }])
 }
 
+pub(crate) fn apply_forall_l_with_term(
+    sequent: &Sequent,
+    index: usize,
+    term: &Term,
+) -> RuleApplication {
+    let Some(Formula::ForAll(vars, body)) = sequent.left.get(index) else {
+        return RuleApplication::Error;
+    };
+
+    let Some(instantiated_formula) =
+        instantiate_quantified_formula_with_term(vars, body, term, Formula::ForAll)
+    else {
+        return RuleApplication::Error;
+    };
+
+    let mut left = Vec::with_capacity(sequent.left.len() + 1);
+    left.extend(sequent.left[..=index].iter().cloned());
+    left.push(instantiated_formula);
+    left.extend(sequent.left[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent {
+        left,
+        right: sequent.right.clone(),
+    }])
+}
+
 fn apply_exists_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Exists(vars, body)) = sequent.left.get(index) else {
         return RuleApplication::Error;
@@ -307,16 +346,29 @@ fn apply_exists_l(sequent: &Sequent, index: usize) -> RuleApplication {
 }
 
 fn apply_exists_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(term) = visible_terms_in_sequent(sequent)
+        .into_iter()
+        .next()
+        .or_else(|| Some(Term::Const(Symbol::User(fresh_branch_term_name(sequent)))))
+    else {
+        return RuleApplication::Error;
+    };
+
+    apply_exists_r_with_term(sequent, index, &term)
+}
+
+pub(crate) fn apply_exists_r_with_term(
+    sequent: &Sequent,
+    index: usize,
+    term: &Term,
+) -> RuleApplication {
     let Some(Formula::Exists(vars, body)) = sequent.right.get(index) else {
         return RuleApplication::Error;
     };
 
-    let Some(instantiated_formula) = instantiate_quantified_formula(
-        vars,
-        body,
-        fresh_eigenconstant_name(sequent),
-        Formula::Exists,
-    ) else {
+    let Some(instantiated_formula) =
+        instantiate_quantified_formula_with_term(vars, body, term, Formula::Exists)
+    else {
         return RuleApplication::Error;
     };
 
@@ -329,133 +381,4 @@ fn apply_exists_r(sequent: &Sequent, index: usize) -> RuleApplication {
         left: sequent.left.clone(),
         right,
     }])
-}
-
-/// Instantiates the outermost variable of a quantified formula.
-///
-/// Given a list of bound variables `vars` and a formula body `body`,
-/// this function:
-/// 1. Takes the first bound variable (e.g. `x` in ∀x,y A or ∃x,y A)
-/// 2. Substitutes it with a fresh constant term (the "eigenconstant")
-/// 3. Rebuilds the formula:
-///    - If no variables remain → returns the instantiated body
-///    - Otherwise → re-wraps the remaining quantifiers around the new body
-///
-/// Example:
-///   ∀x,y. P(x, y)  →  ∀y. P(a, y)
-///
-/// This is used for rules like ∀R and ∃L in LK′, where we instantiate
-/// one variable at a time.
-///
-/// Parameters:
-/// - `vars`: list of bound variables from the quantifier
-/// - `body`: the inner formula being quantified
-/// - `replacement_name`: name of the fresh constant used for substitution
-/// - `wrap_remaining`: constructor (ForAll or Exists) to rebuild remaining quantifiers
-///
-/// Returns:
-/// - `Some(instantiated_formula)` if at least one variable exists
-/// - `None` if `vars` is empty (invalid quantified formula)
-///
-/// Notes:
-/// - Substitution should be capture-avoiding (handled by `substitute_var`)
-/// - The replacement term is a constant (eigenconstant), ensuring correctness
-///   for rules requiring freshness conditions
-fn instantiate_quantified_formula(
-    vars: &[crate::ast::Var],
-    body: &Formula,
-    replacement_name: String,
-    wrap_remaining: fn(Vec<crate::ast::Var>, Box<Formula>) -> Formula,
-) -> Option<Formula> {
-    let (first_var, remaining_vars) = vars.split_first()?;
-    let replacement = Term::Const(Symbol::User(replacement_name));
-    let instantiated_body = body.substitute_var(&first_var.name, &replacement);
-
-    Some(if remaining_vars.is_empty() {
-        instantiated_body
-    } else {
-        wrap_remaining(remaining_vars.to_vec(), Box::new(instantiated_body))
-    })
-}
-
-fn fresh_eigenconstant_name(sequent: &Sequent) -> String {
-    let mut used = BTreeSet::new();
-    for formula in &sequent.left {
-        collect_formula_symbols(formula, &mut used);
-    }
-    for formula in &sequent.right {
-        collect_formula_symbols(formula, &mut used);
-    }
-
-    for suffix in 0.. {
-        for letter in b'a'..=b'z' {
-            let mut candidate = String::from(char::from(letter));
-            if suffix > 0 {
-                candidate.push_str(&suffix.to_string());
-            }
-            if !used.contains(&candidate) {
-                return candidate;
-            }
-        }
-    }
-
-    unreachable!("fresh eigenconstant generation should always find a name")
-}
-
-fn collect_formula_symbols(formula: &Formula, used: &mut BTreeSet<String>) {
-    match formula {
-        Formula::True | Formula::False => {}
-        Formula::Atom(atom) => collect_atom_symbols(atom, used),
-        Formula::Not(inner) => collect_formula_symbols(inner, used),
-        Formula::And(items) | Formula::Or(items) => {
-            for item in items {
-                collect_formula_symbols(item, used);
-            }
-        }
-        Formula::Implies(left, right) => {
-            collect_formula_symbols(left, used);
-            collect_formula_symbols(right, used);
-        }
-        Formula::ForAll(vars, body) | Formula::Exists(vars, body) => {
-            for var in vars {
-                used.insert(var.name.clone());
-            }
-            collect_formula_symbols(body, used);
-        }
-    }
-}
-
-fn collect_atom_symbols(atom: &Atom, used: &mut BTreeSet<String>) {
-    match atom {
-        Atom::Predicate { name, args } => {
-            collect_symbol(name, used);
-            for arg in args {
-                collect_term_symbols(arg, used);
-            }
-        }
-    }
-}
-
-fn collect_term_symbols(term: &Term, used: &mut BTreeSet<String>) {
-    match term {
-        Term::Var(var) => {
-            used.insert(var.name.clone());
-        }
-        Term::Const(symbol) => collect_symbol(symbol, used),
-        Term::Fun { name, args } => {
-            collect_symbol(name, used);
-            for arg in args {
-                collect_term_symbols(arg, used);
-            }
-        }
-        Term::Number(_) | Term::DistinctObject(_) => {}
-    }
-}
-
-fn collect_symbol(symbol: &Symbol, used: &mut BTreeSet<String>) {
-    match symbol {
-        Symbol::User(value) | Symbol::Defined(value) | Symbol::System(value) => {
-            used.insert(value.clone());
-        }
-    }
 }
