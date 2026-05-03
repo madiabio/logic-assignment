@@ -25,13 +25,13 @@ use crate::Sequent;
 use crate::proof::apply::{
     RuleApplication, apply_exists_r_with_term, apply_forall_l_with_term, apply_rule,
 };
-use crate::proof::quantifier::visible_terms_in_sequent;
 use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
-use crate::proof::search::scheduler::{ScheduledRule, schedule_next_rules};
+use crate::proof::search::scheduler::{ScheduleResult, ScheduledRule, schedule_next_rules};
 
 const DEFAULT_PROVE_TIMEOUT: Duration = Duration::from_secs(50);
 const DEFAULT_MAX_DEPTH: usize = 128;
 const DEFAULT_MAX_STEPS: usize = 50_000;
+const DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER: usize = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Runtime options controlling proof search.
@@ -48,6 +48,10 @@ pub struct ProofOptions {
     ///
     /// The default comes from `DEFAULT_MAX_STEPS`.
     pub max_steps: usize,
+    /// Maximum fresh fallback terms for one reusable quantified occurrence.
+    ///
+    /// Exhausting this budget leaves the branch open and returns `Unknown`.
+    pub max_fresh_terms_per_quantifier: usize,
 }
 
 impl Default for ProofOptions {
@@ -56,6 +60,7 @@ impl Default for ProofOptions {
             timeout: DEFAULT_PROVE_TIMEOUT,
             max_depth: DEFAULT_MAX_DEPTH,
             max_steps: DEFAULT_MAX_STEPS,
+            max_fresh_terms_per_quantifier: DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER,
         }
     }
 }
@@ -147,7 +152,7 @@ pub fn prove_with_cancel(
     cancel_requested: &AtomicBool,
 ) -> ProofResult {
     let deadline = Instant::now() + options.timeout;
-    let state = BranchState::new(visible_terms_in_sequent(sequent));
+    let state = BranchState::new();
     let mut steps_taken = 0usize;
 
     ProofResult {
@@ -190,9 +195,12 @@ fn backwards_search(
     }
     *steps_taken += 1;
 
-    let Some(scheduled_rules) = schedule_next_rules(sequent, state) else {
-        return SearchOutcome::NotProvable;
-    };
+    let scheduled_rules =
+        match schedule_next_rules(sequent, state, options.max_fresh_terms_per_quantifier) {
+            ScheduleResult::Rules(rules) => rules,
+            ScheduleResult::QuantifierExhausted => return SearchOutcome::Unknown,
+            ScheduleResult::NoRules => return SearchOutcome::NotProvable,
+        };
 
     let mut best = SearchOutcome::NotProvable;
 

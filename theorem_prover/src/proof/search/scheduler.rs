@@ -5,9 +5,16 @@
 
 use crate::Sequent;
 use crate::ast::Term;
-use crate::proof::quantifier::fresh_branch_term_name;
+use crate::proof::quantifier::{fresh_branch_term_name, visible_terms_in_sequent};
 use crate::proof::rules::{Rule, RuleMatch, Side, find_applicable_rules};
 use crate::proof::search::branch_state::BranchState;
+
+/// Outcome of trying to schedule the next proof-search step.
+pub(crate) enum ScheduleResult {
+    Rules(Vec<ScheduledRule>),
+    QuantifierExhausted,
+    NoRules,
+}
 
 /// A rule application that is ready to run, possibly with a chosen quantifier term.
 pub(crate) enum ScheduledRule {
@@ -30,7 +37,8 @@ pub(crate) enum ScheduledRule {
 pub(crate) fn schedule_next_rules(
     sequent: &Sequent,
     state: &BranchState,
-) -> Option<Vec<ScheduledRule>> {
+    max_fresh_terms_per_quantifier: usize,
+) -> ScheduleResult {
     let rule_matches = find_applicable_rules(sequent);
 
     let mut scheduled = Vec::new();
@@ -40,7 +48,7 @@ pub(crate) fn schedule_next_rules(
         }
     }
     if !scheduled.is_empty() {
-        return Some(scheduled);
+        return ScheduleResult::Rules(scheduled);
     }
 
     let mut scheduled = Vec::new();
@@ -59,7 +67,7 @@ pub(crate) fn schedule_next_rules(
         }
     }
     if !scheduled.is_empty() {
-        return Some(scheduled);
+        return ScheduleResult::Rules(scheduled);
     }
 
     let mut scheduled = Vec::new();
@@ -69,27 +77,41 @@ pub(crate) fn schedule_next_rules(
         }
     }
     if !scheduled.is_empty() {
-        return Some(scheduled);
+        return ScheduleResult::Rules(scheduled);
     }
 
     let mut scheduled = Vec::new();
+    let mut saw_reusable_quantifier = false;
     for rule_match in &rule_matches {
-        for next_rule in schedule_quantifier_instantiations(sequent, state, rule_match) {
+        if matches!(rule_match.rule, Rule::ForAllL | Rule::ExistsR) {
+            saw_reusable_quantifier = true;
+        }
+        for next_rule in schedule_quantifier_instantiations(
+            sequent,
+            state,
+            rule_match,
+            max_fresh_terms_per_quantifier,
+        ) {
             scheduled.push(next_rule);
         }
     }
     if !scheduled.is_empty() {
-        return Some(scheduled);
+        return ScheduleResult::Rules(scheduled);
     }
 
-    None
+    if saw_reusable_quantifier {
+        ScheduleResult::QuantifierExhausted
+    } else {
+        ScheduleResult::NoRules
+    }
 }
 
-/// Schedules frozen-baseline instantiations, then one fresh fallback per quantified occurrence.
+/// Schedules current branch-term instantiations, then bounded fresh fallback.
 fn schedule_quantifier_instantiations(
     sequent: &Sequent,
     state: &BranchState,
     rule_match: &RuleMatch,
+    max_fresh_terms_per_quantifier: usize,
 ) -> Vec<ScheduledRule> {
     let Some(key) = quantified_occurrence_key(sequent, rule_match.side, rule_match.index) else {
         return Vec::new();
@@ -101,21 +123,21 @@ fn schedule_quantifier_instantiations(
         .unwrap_or_default();
 
     let mut scheduled = Vec::new();
-    for term in state.baseline_terms.iter() {
-        if usage.used_baseline_terms.contains(term) {
+    for term in visible_terms_in_sequent(sequent) {
+        if usage.used_terms.contains(&term) {
             continue;
         }
 
         scheduled.push(match rule_match.rule {
             Rule::ForAllL => ScheduledRule::ForAllL {
                 rule_match: *rule_match,
-                term: term.clone(),
+                term,
                 key: key.clone(),
                 fresh_fallback: false,
             },
             Rule::ExistsR => ScheduledRule::ExistsR {
                 rule_match: *rule_match,
-                term: term.clone(),
+                term,
                 key: key.clone(),
                 fresh_fallback: false,
             },
@@ -127,7 +149,7 @@ fn schedule_quantifier_instantiations(
         return scheduled;
     }
 
-    if usage.fresh_used {
+    if usage.fresh_terms_used >= max_fresh_terms_per_quantifier {
         return Vec::new();
     }
 
@@ -173,4 +195,89 @@ fn quantified_occurrence_key(sequent: &Sequent, side: Side, index: usize) -> Opt
         .count();
 
     Some(format!("{side:?}:{ordinal}:{formula_text}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{Formula, Symbol, Var};
+    use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
+
+    fn var(name: &str) -> Var {
+        Var {
+            name: name.to_owned(),
+        }
+    }
+
+    fn variable(name: &str) -> Term {
+        Term::Var(var(name))
+    }
+
+    fn constant(name: &str) -> Term {
+        Term::Const(Symbol::User(name.to_owned()))
+    }
+
+    fn function(name: &str, args: Vec<Term>) -> Term {
+        Term::Fun {
+            name: Symbol::User(name.to_owned()),
+            args,
+        }
+    }
+
+    fn predicate(name: &str, args: Vec<Term>) -> Formula {
+        Formula::predicate(name, args)
+    }
+
+    #[test]
+    fn schedules_newly_visible_branch_terms_for_reusable_quantifiers() {
+        let quantified = Formula::ForAll(
+            vec![var("X")],
+            Box::new(predicate("p", vec![variable("X")])),
+        );
+        let term_a = constant("a");
+        let term_f_a = function("f", vec![term_a.clone()]);
+        let sequent = Sequent {
+            left: vec![
+                quantified,
+                predicate("p", vec![term_a.clone()]),
+                predicate("p", vec![term_f_a.clone()]),
+            ],
+            right: vec![Formula::atom("goal")],
+        };
+        let mut state = BranchState::new();
+        let key = quantified_occurrence_key(&sequent, Side::Left, 0)
+            .expect("quantified formula should have a key");
+        record_quantifier_term(&mut state, &key, &term_a, false);
+
+        let result = schedule_next_rules(&sequent, &state, 1);
+
+        let ScheduleResult::Rules(rules) = result else {
+            panic!("expected a scheduled branch-term instantiation");
+        };
+        assert!(rules.iter().any(|rule| matches!(
+            rule,
+            ScheduledRule::ForAllL { term, .. } if term == &term_f_a
+        )));
+    }
+
+    #[test]
+    fn reports_quantifier_exhausted_when_terms_and_fresh_budget_are_spent() {
+        let quantified = Formula::Exists(
+            vec![var("X")],
+            Box::new(predicate("p", vec![variable("X")])),
+        );
+        let term_w = constant("w");
+        let sequent = Sequent {
+            left: Vec::new(),
+            right: vec![quantified, predicate("p", vec![term_w.clone()])],
+        };
+        let mut state = BranchState::new();
+        let key = quantified_occurrence_key(&sequent, Side::Right, 0)
+            .expect("quantified formula should have a key");
+        record_quantifier_term(&mut state, &key, &term_w, true);
+
+        let result = schedule_next_rules(&sequent, &state, 1);
+
+        assert!(matches!(result, ScheduleResult::QuantifierExhausted));
+    }
 }

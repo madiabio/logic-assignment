@@ -119,6 +119,30 @@ fof(conj_1,conjecture,(p => q)).
 }
 
 #[test]
+fn run_problem_proves_syn968_shape_by_revisiting_exists_right() {
+    let result = run_problem(
+        r#"
+fof(conj_1,conjecture,? [X] : ! [Y] : (p(X) => p(Y))).
+"#,
+    )
+    .expect("pipeline should succeed");
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn run_problem_does_not_refute_open_quantified_theorem_shape() {
+    let result = run_problem(
+        r#"
+fof(conj_1,conjecture,~ ? [Y] : ! [X] : (a(X,Y) <=> ~ a(X,X))).
+"#,
+    )
+    .expect("pipeline should succeed");
+
+    assert_ne!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
 fn run_problem_reports_parse_failures() {
     let err = run_problem("fof(bad,axiom,(p(a)).").expect_err("pipeline should reject bad syntax");
 
