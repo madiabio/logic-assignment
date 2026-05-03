@@ -1,9 +1,12 @@
+//! Scheduling policy for choosing which matched rule to try next.
+
 use crate::Sequent;
 use crate::ast::Term;
 use crate::proof::quantifier::{fresh_branch_term_name, visible_terms_in_sequent};
 use crate::proof::rules::{Rule, RuleMatch, Side, find_applicable_rules};
 use crate::proof::search::branch_state::BranchState;
 
+/// A rule application that is ready to run, possibly with a chosen quantifier term.
 pub(crate) enum ScheduledRule {
     Standard(RuleMatch),
     ForAllL {
@@ -20,6 +23,7 @@ pub(crate) enum ScheduledRule {
     },
 }
 
+/// Selects the next batch of rules to try for the current sequent and branch state.
 pub(crate) fn schedule_next_rules(
     sequent: &Sequent,
     state: &BranchState,
@@ -88,13 +92,18 @@ pub(crate) fn schedule_next_rules(
     None
 }
 
+/// Schedules quantifier rules that can reuse a visible term not tried on this branch yet.
 fn schedule_quantifier_reuse(
     sequent: &Sequent,
     state: &BranchState,
     rule_match: &RuleMatch,
 ) -> Option<ScheduledRule> {
     let key = quantified_occurrence_key(sequent, rule_match.side, rule_match.index)?;
-    let usage = state.quantifier_usage.get(&key).cloned().unwrap_or_default();
+    let usage = state
+        .quantifier_usage
+        .get(&key)
+        .cloned()
+        .unwrap_or_default();
 
     let term = visible_terms_in_sequent(sequent)
         .into_iter()
@@ -117,13 +126,18 @@ fn schedule_quantifier_reuse(
     })
 }
 
+/// Schedules one fresh-term fallback for a quantified occurrence when reuse is exhausted.
 fn schedule_quantifier_fresh_fallback(
     sequent: &Sequent,
     state: &BranchState,
     rule_match: &RuleMatch,
 ) -> Option<ScheduledRule> {
     let key = quantified_occurrence_key(sequent, rule_match.side, rule_match.index)?;
-    let usage = state.quantifier_usage.get(&key).cloned().unwrap_or_default();
+    let usage = state
+        .quantifier_usage
+        .get(&key)
+        .cloned()
+        .unwrap_or_default();
     if usage.fresh_fallback_used {
         return None;
     }
@@ -147,6 +161,7 @@ fn schedule_quantifier_fresh_fallback(
     })
 }
 
+/// Builds a stable key for one quantified formula occurrence within a sequent.
 fn quantified_occurrence_key(sequent: &Sequent, side: Side, index: usize) -> Option<String> {
     let formulas = match side {
         Side::Left => &sequent.left,
@@ -154,7 +169,10 @@ fn quantified_occurrence_key(sequent: &Sequent, side: Side, index: usize) -> Opt
     };
 
     let formula = formulas.get(index)?;
-    if !matches!(formula, crate::ast::Formula::ForAll(_, _) | crate::ast::Formula::Exists(_, _)) {
+    if !matches!(
+        formula,
+        crate::ast::Formula::ForAll(_, _) | crate::ast::Formula::Exists(_, _)
+    ) {
         return None;
     }
 

@@ -1,7 +1,10 @@
+//! Rule matching over the formulas currently visible in a sequent.
+
 use crate::Sequent;
 use crate::ast::Formula;
 use crate::proof::rules::kinds::{Rule, RuleMatch, Side};
 
+/// Finds every rule that can be applied immediately to the given sequent.
 pub fn find_applicable_rules(sequent: &Sequent) -> Vec<RuleMatch> {
     let mut matches = Vec::new();
 
@@ -42,6 +45,7 @@ pub fn find_applicable_rules(sequent: &Sequent) -> Vec<RuleMatch> {
     matches
 }
 
+/// Maps a left-side formula to its corresponding left introduction rule, if any.
 fn left_rule(formula: &Formula) -> Option<Rule> {
     match formula {
         Formula::False => Some(Rule::BottomL),
@@ -55,6 +59,7 @@ fn left_rule(formula: &Formula) -> Option<Rule> {
     }
 }
 
+/// Maps a right-side formula to its corresponding right introduction rule, if any.
 fn right_rule(formula: &Formula) -> Option<Rule> {
     match formula {
         Formula::True => Some(Rule::TopR),

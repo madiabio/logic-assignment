@@ -158,9 +158,9 @@ impl Formula {
                     .map(|arg| arg.substitute_var(variable_name, replacement))
                     .collect(),
             }),
-            Formula::Not(inner) => Formula::Not(Box::new(
-                inner.substitute_var(variable_name, replacement),
-            )),
+            Formula::Not(inner) => {
+                Formula::Not(Box::new(inner.substitute_var(variable_name, replacement)))
+            }
             Formula::And(items) => Formula::And(
                 items
                     .iter()

@@ -1,3 +1,12 @@
+//! Rule application logic for structural, connective, and quantifier rules.
+//!
+//! File layout:
+//! - `structural.rs` applies the branch-closing structural rules `Id`, `TopR`, and `BottomL`.
+//! - `connective.rs` applies the propositional rules `AndL`, `AndR`, `OrL`, `OrR`,
+//!   `ImpliesL`, `ImpliesR`, `NotL`, and `NotR`.
+//! - `quantifier.rs` applies the quantified rules `ForAllL`, `ForAllR`, `ExistsL`,
+//!   and `ExistsR`, including term-selection helpers used by search.
+
 use crate::proof::rules::{Rule, RuleMatch};
 use crate::proof::sequent::Sequent;
 
@@ -8,13 +17,19 @@ pub mod structural;
 pub(crate) use quantifier::{apply_exists_r_with_term, apply_forall_l_with_term};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// The result of applying a rule to a sequent.
 pub enum RuleApplication {
+    /// The branch closes immediately.
     Closed,
+    /// The rule produces one or more premises that must all be proved.
     Premises(Vec<Sequent>),
+    /// The rule is recognised but not implemented yet.
     NotImplemented,
+    /// The requested rule could not be applied to the given sequent.
     Error,
 }
 
+/// Applies the matched rule and returns the resulting proof-state transition.
 pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication {
     match rule_match.rule {
         Rule::Id | Rule::TopR | Rule::BottomL => structural::apply_structural(rule_match.rule),

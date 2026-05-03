@@ -409,7 +409,10 @@ fn apply_rule_peels_leftmost_formula_from_multiway_right_disjunction() {
 fn apply_rule_moves_implication_antecedent_left_and_consequent_right() {
     let sequent = Sequent {
         left: vec![predicate_formula("q")],
-        right: vec![Formula::implies(predicate_formula("p"), predicate_formula("r"))],
+        right: vec![Formula::implies(
+            predicate_formula("p"),
+            predicate_formula("r"),
+        )],
     };
 
     let application = apply_rule_with_optional_trace(
@@ -433,7 +436,10 @@ fn apply_rule_moves_implication_antecedent_left_and_consequent_right() {
 #[test]
 fn apply_rule_branches_left_implication_into_two_premises() {
     let sequent = Sequent {
-        left: vec![Formula::implies(predicate_formula("p"), predicate_formula("q"))],
+        left: vec![Formula::implies(
+            predicate_formula("p"),
+            predicate_formula("q"),
+        )],
         right: vec![predicate_formula("goal")],
     };
 

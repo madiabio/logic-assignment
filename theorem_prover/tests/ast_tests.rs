@@ -39,7 +39,10 @@ fn formula_constructors_build_expected_ast_shapes() {
         Formula::predicate("p", vec![variable("X"), constant("a")]),
         Formula::Atom(predicate_with_args("p", vec![variable("X"), constant("a")]))
     );
-    assert_eq!(Formula::not(atom_formula("p")), Formula::Not(Box::new(atom_formula("p"))));
+    assert_eq!(
+        Formula::not(atom_formula("p")),
+        Formula::Not(Box::new(atom_formula("p")))
+    );
     assert_eq!(
         Formula::and(vec![atom_formula("p"), atom_formula("q")]),
         Formula::And(vec![atom_formula("p"), atom_formula("q")])
@@ -127,10 +130,7 @@ fn formulas_display_atoms_constants_and_quantifiers() {
     assert_eq!(
         format!(
             "{}",
-            Formula::not(Formula::and(vec![
-                atom_formula("p"),
-                atom_formula("q")
-            ]))
+            Formula::not(Formula::and(vec![atom_formula("p"), atom_formula("q")]))
         ),
         "¬(p ∧ q)"
     );
@@ -180,16 +180,16 @@ fn formulas_display_connectives_with_precedence() {
         "p ∨ q"
     );
     assert_eq!(
-        format!(
-            "{}",
-            Formula::implies(atom_formula("p"), atom_formula("q"))
-        ),
+        format!("{}", Formula::implies(atom_formula("p"), atom_formula("q"))),
         "p ⇒ q"
     );
     assert_eq!(
         format!(
             "{}",
-            Formula::implies(Formula::and(vec![atom_formula("p"), atom_formula("q")]), atom_formula("r"))
+            Formula::implies(
+                Formula::and(vec![atom_formula("p"), atom_formula("q")]),
+                atom_formula("r")
+            )
         ),
         "p ∧ q ⇒ r"
     );

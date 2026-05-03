@@ -1,3 +1,5 @@
+//! Quantifier-specific helpers for fresh names, instantiation, and visible terms.
+
 pub mod fresh;
 pub mod instantiate;
 pub mod terms;

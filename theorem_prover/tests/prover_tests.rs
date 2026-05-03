@@ -270,7 +270,10 @@ fn prove_returns_provable_when_orr_exposes_identity() {
 fn prove_returns_not_provable_after_applying_implies_right_rule() {
     let sequent = Sequent {
         left: vec![predicate_formula("q")],
-        right: vec![Formula::implies(predicate_formula("p"), predicate_formula("r"))],
+        right: vec![Formula::implies(
+            predicate_formula("p"),
+            predicate_formula("r"),
+        )],
     };
 
     let result = prove(&sequent, default_options());
@@ -332,7 +335,10 @@ fn prove_stops_after_one_fresh_exists_right_fallback() {
 fn prove_returns_provable_when_impliesr_exposes_identity() {
     let sequent = Sequent {
         left: vec![predicate_formula("q")],
-        right: vec![Formula::implies(predicate_formula("p"), predicate_formula("q"))],
+        right: vec![Formula::implies(
+            predicate_formula("p"),
+            predicate_formula("q"),
+        )],
     };
 
     let result = prove(&sequent, default_options());
@@ -358,7 +364,10 @@ fn prove_returns_provable_for_modus_ponens_shape_via_impliesl() {
 #[test]
 fn prove_returns_not_provable_when_impliesl_leaves_an_open_branch() {
     let sequent = Sequent {
-        left: vec![Formula::implies(predicate_formula("p"), predicate_formula("q"))],
+        left: vec![Formula::implies(
+            predicate_formula("p"),
+            predicate_formula("q"),
+        )],
         right: vec![predicate_formula("q")],
     };
 
@@ -392,10 +401,7 @@ fn prove_respects_custom_timeout_options() {
 fn prove_returns_provable_when_notr_exposes_identity() {
     let sequent = Sequent {
         left: vec![predicate_formula("q")],
-        right: vec![
-            Formula::not(predicate_formula("p")),
-            predicate_formula("p"),
-        ],
+        right: vec![Formula::not(predicate_formula("p")), predicate_formula("p")],
     };
 
     let result = prove(&sequent, default_options());

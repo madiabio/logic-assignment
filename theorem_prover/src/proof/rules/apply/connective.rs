@@ -1,7 +1,10 @@
+//! Application of propositional connective rules.
+
 use crate::ast::Formula;
 use crate::proof::rules::apply::RuleApplication;
 use crate::proof::sequent::Sequent;
 
+/// Applies `∧L` by expanding the selected conjunction on the left.
 pub(crate) fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::And(items)) = sequent.left.get(index) else {
         return RuleApplication::Error;
@@ -27,6 +30,7 @@ pub(crate) fn apply_and_l(sequent: &Sequent, index: usize) -> RuleApplication {
     }])
 }
 
+/// Applies `∧R` by splitting the selected conjunction on the right into two branches.
 pub(crate) fn apply_and_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::And(items)) = sequent.right.get(index) else {
         return RuleApplication::Error;
@@ -62,6 +66,7 @@ pub(crate) fn apply_and_r(sequent: &Sequent, index: usize) -> RuleApplication {
     ])
 }
 
+/// Applies `∨L` by branching on the selected disjunction on the left.
 pub(crate) fn apply_or_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Or(items)) = sequent.left.get(index) else {
         return RuleApplication::Error;
@@ -97,6 +102,7 @@ pub(crate) fn apply_or_l(sequent: &Sequent, index: usize) -> RuleApplication {
     ])
 }
 
+/// Applies `∨R` by expanding the selected disjunction on the right in place.
 pub(crate) fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Or(items)) = sequent.right.get(index) else {
         return RuleApplication::Error;
@@ -122,6 +128,7 @@ pub(crate) fn apply_or_r(sequent: &Sequent, index: usize) -> RuleApplication {
     }])
 }
 
+/// Applies `→R` by moving the antecedent to the left and keeping the consequent on the right.
 pub(crate) fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Implies(left_formula, right_formula)) = sequent.right.get(index) else {
         return RuleApplication::Error;
@@ -139,6 +146,7 @@ pub(crate) fn apply_implies_r(sequent: &Sequent, index: usize) -> RuleApplicatio
     RuleApplication::Premises(vec![Sequent { left, right }])
 }
 
+/// Applies `→L` by branching over the implication's antecedent and consequent.
 pub(crate) fn apply_implies_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Implies(left_formula, right_formula)) = sequent.left.get(index) else {
         return RuleApplication::Error;
@@ -168,6 +176,7 @@ pub(crate) fn apply_implies_l(sequent: &Sequent, index: usize) -> RuleApplicatio
     ])
 }
 
+/// Applies `¬L` by moving the negated formula to the right.
 pub(crate) fn apply_not_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Not(inner)) = sequent.left.get(index) else {
         return RuleApplication::Error;
@@ -184,6 +193,7 @@ pub(crate) fn apply_not_l(sequent: &Sequent, index: usize) -> RuleApplication {
     RuleApplication::Premises(vec![Sequent { left, right }])
 }
 
+/// Applies `¬R` by moving the negated formula to the left.
 pub(crate) fn apply_not_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Not(inner)) = sequent.right.get(index) else {
         return RuleApplication::Error;

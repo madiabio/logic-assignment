@@ -1,3 +1,5 @@
+//! Application of quantifier rules, including term instantiation choices.
+
 use crate::ast::{Formula, Symbol, Term};
 use crate::proof::quantifier::{
     fresh_branch_term_name, fresh_eigenconstant_name, instantiate_quantified_formula,
@@ -6,6 +8,7 @@ use crate::proof::quantifier::{
 use crate::proof::rules::apply::RuleApplication;
 use crate::proof::sequent::Sequent;
 
+/// Applies `∀L`, reusing a visible term when possible and falling back to a fresh one.
 pub(crate) fn apply_forall_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(term) = visible_terms_in_sequent(sequent)
         .into_iter()
@@ -18,6 +21,7 @@ pub(crate) fn apply_forall_l(sequent: &Sequent, index: usize) -> RuleApplication
     apply_forall_l_with_term(sequent, index, &term)
 }
 
+/// Applies `∀R` with a fresh eigenconstant.
 pub(crate) fn apply_forall_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::ForAll(vars, body)) = sequent.right.get(index) else {
         return RuleApplication::Error;
@@ -43,6 +47,7 @@ pub(crate) fn apply_forall_r(sequent: &Sequent, index: usize) -> RuleApplication
     }])
 }
 
+/// Applies `∀L` using a term selected externally by the scheduler.
 pub(crate) fn apply_forall_l_with_term(
     sequent: &Sequent,
     index: usize,
@@ -69,6 +74,7 @@ pub(crate) fn apply_forall_l_with_term(
     }])
 }
 
+/// Applies `∃L` with a fresh eigenconstant.
 pub(crate) fn apply_exists_l(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(Formula::Exists(vars, body)) = sequent.left.get(index) else {
         return RuleApplication::Error;
@@ -94,6 +100,7 @@ pub(crate) fn apply_exists_l(sequent: &Sequent, index: usize) -> RuleApplication
     }])
 }
 
+/// Applies `∃R`, reusing a visible term when possible and falling back to a fresh one.
 pub(crate) fn apply_exists_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(term) = visible_terms_in_sequent(sequent)
         .into_iter()
@@ -106,6 +113,7 @@ pub(crate) fn apply_exists_r(sequent: &Sequent, index: usize) -> RuleApplication
     apply_exists_r_with_term(sequent, index, &term)
 }
 
+/// Applies `∃R` using a term selected externally by the scheduler.
 pub(crate) fn apply_exists_r_with_term(
     sequent: &Sequent,
     index: usize,

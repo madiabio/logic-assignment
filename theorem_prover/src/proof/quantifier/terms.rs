@@ -1,8 +1,11 @@
+//! Term and symbol collection helpers used by quantifier scheduling.
+
 use std::collections::BTreeSet;
 
 use crate::Sequent;
 use crate::ast::{Atom, Formula, Symbol, Term};
 
+/// Collects distinct non-variable terms that are visible in the sequent.
 pub(crate) fn visible_terms_in_sequent(sequent: &Sequent) -> Vec<Term> {
     let mut seen = BTreeSet::new();
     let mut terms = Vec::new();
@@ -17,6 +20,7 @@ pub(crate) fn visible_terms_in_sequent(sequent: &Sequent) -> Vec<Term> {
     terms
 }
 
+/// Collects every symbol name that appears anywhere in the sequent.
 pub(crate) fn collect_sequent_symbols(sequent: &Sequent, used: &mut BTreeSet<String>) {
     for formula in &sequent.left {
         collect_formula_symbols(formula, used);
@@ -26,6 +30,7 @@ pub(crate) fn collect_sequent_symbols(sequent: &Sequent, used: &mut BTreeSet<Str
     }
 }
 
+/// Walks a formula and records all symbol names that it contains.
 fn collect_formula_symbols(formula: &Formula, used: &mut BTreeSet<String>) {
     match formula {
         Formula::True | Formula::False => {}
@@ -49,6 +54,7 @@ fn collect_formula_symbols(formula: &Formula, used: &mut BTreeSet<String>) {
     }
 }
 
+/// Records the symbols mentioned by an atomic formula.
 fn collect_atom_symbols(atom: &Atom, used: &mut BTreeSet<String>) {
     match atom {
         Atom::Predicate { name, args } => {
@@ -60,6 +66,7 @@ fn collect_atom_symbols(atom: &Atom, used: &mut BTreeSet<String>) {
     }
 }
 
+/// Records every symbol reachable from a term.
 fn collect_term_symbols(term: &Term, used: &mut BTreeSet<String>) {
     match term {
         Term::Var(var) => {
@@ -76,6 +83,7 @@ fn collect_term_symbols(term: &Term, used: &mut BTreeSet<String>) {
     }
 }
 
+/// Records a symbol's printable name.
 fn collect_symbol(symbol: &Symbol, used: &mut BTreeSet<String>) {
     match symbol {
         Symbol::User(value) | Symbol::Defined(value) | Symbol::System(value) => {
@@ -84,6 +92,7 @@ fn collect_symbol(symbol: &Symbol, used: &mut BTreeSet<String>) {
     }
 }
 
+/// Walks a formula and appends visible non-variable terms in encounter order.
 fn collect_visible_formula_terms(
     formula: &Formula,
     seen: &mut BTreeSet<String>,
@@ -108,6 +117,7 @@ fn collect_visible_formula_terms(
     }
 }
 
+/// Appends visible terms from an atomic predicate's arguments.
 fn collect_visible_atom_terms(atom: &Atom, seen: &mut BTreeSet<String>, terms: &mut Vec<Term>) {
     match atom {
         Atom::Predicate { args, .. } => {
@@ -118,6 +128,7 @@ fn collect_visible_atom_terms(atom: &Atom, seen: &mut BTreeSet<String>, terms: &
     }
 }
 
+/// Adds a term once, recursing into function arguments before recording the term itself.
 fn collect_visible_term(term: &Term, seen: &mut BTreeSet<String>, terms: &mut Vec<Term>) {
     if matches!(term, Term::Var(_)) {
         return;

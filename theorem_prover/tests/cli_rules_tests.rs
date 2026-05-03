@@ -131,7 +131,10 @@ fof(conj_1,conjecture,p).
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(!stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("prover returned Provable"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("prover returned Provable"),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]
@@ -158,7 +161,10 @@ fof(conj_1,conjecture,p).
 
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(stdout.contains("p ⊢ p"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("prover returned Provable"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("prover returned Provable"),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]
@@ -460,7 +466,8 @@ fof(ax_1,axiom,q).
 fof(conj_1,conjecture,q).
 "#,
     );
-    fs::write(parse_failed_marker_path(&skipped), "stale marker").expect("marker should be written");
+    fs::write(parse_failed_marker_path(&skipped), "stale marker")
+        .expect("marker should be written");
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args(["--rules", dir.to_str().expect("path should be utf-8")])

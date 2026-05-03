@@ -1,5 +1,8 @@
+//! Helpers for instantiating quantified formulas during proof search.
+
 use crate::ast::{Formula, Symbol, Term};
 
+/// Instantiates the leading quantified variable with a fresh constant name.
 pub(crate) fn instantiate_quantified_formula(
     vars: &[crate::ast::Var],
     body: &Formula,
@@ -10,6 +13,7 @@ pub(crate) fn instantiate_quantified_formula(
     instantiate_quantified_formula_with_term(vars, body, &replacement, wrap_remaining)
 }
 
+/// Instantiates the leading quantified variable with a specific replacement term.
 pub(crate) fn instantiate_quantified_formula_with_term(
     vars: &[crate::ast::Var],
     body: &Formula,
