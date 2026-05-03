@@ -27,6 +27,7 @@ pub fn apply_rule(sequent: &Sequent, rule_match: &RuleMatch) -> RuleApplication 
         Rule::NotR => apply_not_r(sequent, rule_match.index),
         Rule::ForAllR => apply_forall_r(sequent, rule_match.index),
         Rule::ExistsL => apply_exists_l(sequent, rule_match.index),
+        Rule::ExistsR => apply_exists_r(sequent, rule_match.index),
 
         // These are branch closing, and create new branch
         Rule::AndR => apply_and_r(sequent, rule_match.index),
@@ -263,7 +264,7 @@ fn apply_forall_r(sequent: &Sequent, index: usize) -> RuleApplication {
     let Some(replacement_formula) = instantiate_quantified_formula(
         vars,
         body,
-        fresh_eigenconstant_name(sequent),
+        fresh_eigenconstant_name(sequent), // get arbitraty constant 'a' that doesnt occur in the conclusion
         Formula::ForAll,
     ) else {
         return RuleApplication::Error;
@@ -305,6 +306,61 @@ fn apply_exists_l(sequent: &Sequent, index: usize) -> RuleApplication {
     }])
 }
 
+fn apply_exists_r(sequent: &Sequent, index: usize) -> RuleApplication {
+    let Some(Formula::Exists(vars, body)) = sequent.right.get(index) else {
+        return RuleApplication::Error;
+    };
+
+    let Some(instantiated_formula) = instantiate_quantified_formula(
+        vars,
+        body,
+        fresh_eigenconstant_name(sequent),
+        Formula::Exists,
+    ) else {
+        return RuleApplication::Error;
+    };
+
+    let mut right = Vec::with_capacity(sequent.right.len() + 1);
+    right.extend(sequent.right[..=index].iter().cloned());
+    right.push(instantiated_formula);
+    right.extend(sequent.right[index + 1..].iter().cloned());
+
+    RuleApplication::Premises(vec![Sequent {
+        left: sequent.left.clone(),
+        right,
+    }])
+}
+
+/// Instantiates the outermost variable of a quantified formula.
+///
+/// Given a list of bound variables `vars` and a formula body `body`,
+/// this function:
+/// 1. Takes the first bound variable (e.g. `x` in ∀x,y A or ∃x,y A)
+/// 2. Substitutes it with a fresh constant term (the "eigenconstant")
+/// 3. Rebuilds the formula:
+///    - If no variables remain → returns the instantiated body
+///    - Otherwise → re-wraps the remaining quantifiers around the new body
+///
+/// Example:
+///   ∀x,y. P(x, y)  →  ∀y. P(a, y)
+///
+/// This is used for rules like ∀R and ∃L in LK′, where we instantiate
+/// one variable at a time.
+///
+/// Parameters:
+/// - `vars`: list of bound variables from the quantifier
+/// - `body`: the inner formula being quantified
+/// - `replacement_name`: name of the fresh constant used for substitution
+/// - `wrap_remaining`: constructor (ForAll or Exists) to rebuild remaining quantifiers
+///
+/// Returns:
+/// - `Some(instantiated_formula)` if at least one variable exists
+/// - `None` if `vars` is empty (invalid quantified formula)
+///
+/// Notes:
+/// - Substitution should be capture-avoiding (handled by `substitute_var`)
+/// - The replacement term is a constant (eigenconstant), ensuring correctness
+///   for rules requiring freshness conditions
 fn instantiate_quantified_formula(
     vars: &[crate::ast::Var],
     body: &Formula,
