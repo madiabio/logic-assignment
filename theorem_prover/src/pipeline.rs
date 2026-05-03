@@ -1,9 +1,11 @@
 use std::sync::atomic::AtomicBool;
 
 use crate::{
-    ParsedProblem, ProofOptions, ProofResult, Sequent, SequentBuildError, parse_problem,
-    prove_with_cancel,
+    ParsedProblem, ProofOptions, ProofResult, ProofStatus, Sequent, SequentBuildError,
+    parse_problem, prove_with_cancel,
 };
+
+const MAX_BICONDITIONALS_TO_REWRITE: usize = 12;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProblemPipelineError {
@@ -63,9 +65,31 @@ pub fn run_problem_verbose_with_options_and_cancel(
     options: ProofOptions,
     cancel_requested: &AtomicBool,
 ) -> Result<ProofResult, ProblemPipelineError> {
+    if exceeds_biconditional_rewrite_budget(input) {
+        return Ok(ProofResult {
+            status: ProofStatus::Unknown,
+        });
+    }
+
     let sequent = build_problem_sequent(input)?;
     if show_sequent {
         println!("{sequent}");
     }
     Ok(prove_with_cancel(&sequent, options, cancel_requested))
+}
+
+fn exceeds_biconditional_rewrite_budget(input: &str) -> bool {
+    let mut count = 0usize;
+    for line in input.lines() {
+        let line = line.trim_start();
+        if line.starts_with('%') {
+            continue;
+        }
+
+        count += line.matches("<=>").count();
+        if count > MAX_BICONDITIONALS_TO_REWRITE {
+            return true;
+        }
+    }
+    false
 }

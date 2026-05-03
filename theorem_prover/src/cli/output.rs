@@ -147,7 +147,10 @@ mod tests {
     #[test]
     fn human_proof_status_uses_stable_labels() {
         assert_eq!(human_proof_status(&ProofStatus::Provable), "provable");
-        assert_eq!(human_proof_status(&ProofStatus::NotProvable), "not_provable");
+        assert_eq!(
+            human_proof_status(&ProofStatus::NotProvable),
+            "not_provable"
+        );
         assert_eq!(human_proof_status(&ProofStatus::Unknown), "unknown");
         assert_eq!(human_proof_status(&ProofStatus::Cancelled), "cancelled");
     }

@@ -143,6 +143,25 @@ fof(conj_1,conjecture,~ ? [Y] : ! [X] : (a(X,Y) <=> ~ a(X,X))).
 }
 
 #[test]
+fn run_problem_returns_unknown_when_biconditional_rewrite_budget_is_exhausted() {
+    let started_at = std::time::Instant::now();
+    let result = run_problem(
+        r#"
+fof(conj_1,conjecture,
+    (p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
+     p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14)).
+"#,
+    )
+    .expect("pipeline should return an inconclusive proof result");
+
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert!(
+        started_at.elapsed() < std::time::Duration::from_millis(500),
+        "biconditional budget exhaustion should return before exponential rewrite"
+    );
+}
+
+#[test]
 fn run_problem_reports_parse_failures() {
     let err = run_problem("fof(bad,axiom,(p(a)).").expect_err("pipeline should reject bad syntax");
 

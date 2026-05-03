@@ -543,6 +543,7 @@ fn prove_returns_cancelled_when_flag_is_raised_during_search() {
             timeout: Duration::from_secs(1),
             max_depth: usize::MAX,
             max_steps: usize::MAX,
+            ..default_options()
         },
         cancelled.as_ref(),
     );

@@ -9,9 +9,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
-    Mutex,
 };
 use std::time::Instant;
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
@@ -19,6 +18,17 @@ use theorem_prover::{
     ProblemPipelineError, ProofStatus, build_problem_sequent,
     run_problem_verbose_with_options_and_cancel,
 };
+
+const EXIT_FAILURE: i32 = 1;
+const EXIT_CANCELLED: i32 = 130;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InterruptEvent {
+    ExitNow(i32),
+    FirstCancellation,
+    ForceCancellation,
+    AlreadyForceCancelled,
+}
 
 /// Outcome of running rule inspection on one file.
 #[derive(Clone, Copy)]
@@ -40,43 +50,88 @@ enum ProveFileResult {
 #[derive(Clone)]
 struct CancellationState {
     requested: Arc<AtomicBool>,
+    force_requested: Arc<AtomicBool>,
+    interrupt_count: Arc<AtomicUsize>,
+    exit_immediately: Arc<AtomicBool>,
     next_problem: Arc<Mutex<Option<String>>>,
 }
 
 impl CancellationState {
     /// Installs a `Ctrl+C` handler and exposes its atomic cancellation flag.
     fn install() -> Self {
-        let requested = Arc::new(AtomicBool::new(false));
-        let interrupt_count = Arc::new(AtomicUsize::new(0));
-        let next_problem = Arc::new(Mutex::new(None));
-        let handler_flag = Arc::clone(&requested);
-        let handler_count = Arc::clone(&interrupt_count);
-        let handler_next_problem = Arc::clone(&next_problem);
+        let state = Self::new_uninstalled();
+        let handler_state = state.clone();
         ctrlc::set_handler(move || {
-            let count = handler_count.fetch_add(1, Ordering::Relaxed) + 1;
-            if count == 1 {
-                handler_flag.store(true, Ordering::Relaxed);
-                eprintln!("Cancellation requested. Press Ctrl+C again to force quit.");
-            } else {
-                if let Ok(guard) = handler_next_problem.lock() {
-                    if let Some(next_problem) = &*guard {
-                        eprintln!("Next problem was: {next_problem}");
-                    }
-                }
-                eprintln!("Force quitting.");
-                std::process::exit(130);
+            if let InterruptEvent::ExitNow(code) = handler_state.record_interrupt() {
+                std::process::exit(code);
             }
         })
         .expect("failed to install Ctrl+C handler");
+        state
+    }
+
+    /// Builds cancellation state without registering a process signal handler.
+    fn new_uninstalled() -> Self {
+        let requested = Arc::new(AtomicBool::new(false));
+        let force_requested = Arc::new(AtomicBool::new(false));
+        let interrupt_count = Arc::new(AtomicUsize::new(0));
+        let exit_immediately = Arc::new(AtomicBool::new(true));
+        let next_problem = Arc::new(Mutex::new(None));
         Self {
             requested,
+            force_requested,
+            interrupt_count,
+            exit_immediately,
             next_problem,
         }
+    }
+
+    #[cfg(test)]
+    fn uninstalled_for_test() -> Self {
+        Self::new_uninstalled()
+    }
+
+    /// Switches cancellation into summary-owned mode before proof/rules work starts.
+    fn defer_exit_until_summary(&self) {
+        self.exit_immediately.store(false, Ordering::Relaxed);
+    }
+
+    /// Records an interrupt and reports whether the handler should terminate now.
+    fn record_interrupt(&self) -> InterruptEvent {
+        let count = self.interrupt_count.fetch_add(1, Ordering::Relaxed) + 1;
+        self.requested.store(true, Ordering::Relaxed);
+
+        if self.exit_immediately.load(Ordering::Relaxed) {
+            eprintln!("Cancellation requested.");
+            return InterruptEvent::ExitNow(EXIT_CANCELLED);
+        }
+
+        if count == 1 {
+            eprintln!("Cancellation requested. Press Ctrl+C again to force cancellation.");
+            return InterruptEvent::FirstCancellation;
+        }
+
+        if self.force_requested.swap(true, Ordering::Relaxed) {
+            return InterruptEvent::AlreadyForceCancelled;
+        }
+
+        if let Ok(guard) = self.next_problem.lock() {
+            if let Some(next_problem) = &*guard {
+                eprintln!("Next problem was: {next_problem}");
+            }
+        }
+        eprintln!("Force cancellation requested. Summary will print before exit.");
+        InterruptEvent::ForceCancellation
     }
 
     /// Returns whether cancellation has been requested.
     fn is_requested(&self) -> bool {
         self.requested.load(Ordering::Relaxed)
+    }
+
+    /// Returns whether repeated interrupts requested force cancellation.
+    fn is_force_requested(&self) -> bool {
+        self.force_requested.load(Ordering::Relaxed)
     }
 
     /// Returns the raw atomic flag for proof-engine cancellation checks.
@@ -144,11 +199,35 @@ struct RulesBatchSummary {
     failed_files: Vec<PathBuf>,
 }
 
+fn prove_batch_exit_code(
+    summary: &ProveBatchSummary,
+    cancellation: &CancellationState,
+) -> Option<i32> {
+    if summary.cancelled > 0 || cancellation.is_requested() {
+        Some(EXIT_CANCELLED)
+    } else if summary.failed_to_process > 0 {
+        Some(EXIT_FAILURE)
+    } else {
+        None
+    }
+}
+
+fn rules_batch_exit_code(summary: &RulesBatchSummary) -> Option<i32> {
+    if summary.cancelled {
+        Some(EXIT_CANCELLED)
+    } else if summary.failed > 0 {
+        Some(EXIT_FAILURE)
+    } else {
+        None
+    }
+}
+
 /// Dispatches the `prove` command across direct targets or configured subset
 /// runs.
 pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let cancellation = CancellationState::install();
     if let Some(target) = &options.target {
+        cancellation.defer_exit_until_summary();
         let target = Path::new(target);
         if target.is_dir() {
             prove_directory(target, options, &cancellation);
@@ -170,6 +249,7 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
     }
 
     let config = ensure_config();
+    cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets(&config);
     print_prove_preamble(options.format, Some(targets.len()));
     prove_paths(&targets, options, &cancellation);
@@ -180,6 +260,7 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
 pub(crate) fn run_rules_mode(options: &RulesCommand) {
     let cancellation = CancellationState::install();
     if let Some(target) = &options.target {
+        cancellation.defer_exit_until_summary();
         let target = Path::new(target);
         if target.is_dir() {
             inspect_rules_directory(target, options, &cancellation);
@@ -201,6 +282,7 @@ pub(crate) fn run_rules_mode(options: &RulesCommand) {
     }
 
     let config = ensure_config();
+    cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets(&config);
     print_rules_preamble(options.format, Some(targets.len()));
     inspect_rules_paths(&targets, options, &cancellation);
@@ -229,7 +311,11 @@ fn prove_directory(dir: &Path, options: &ProveCommand, cancellation: &Cancellati
 }
 
 /// Processes many problems through the prover and emits aggregate results.
-fn prove_paths(problem_runs: &[ProblemRun], options: &ProveCommand, cancellation: &CancellationState) {
+fn prove_paths(
+    problem_runs: &[ProblemRun],
+    options: &ProveCommand,
+    cancellation: &CancellationState,
+) {
     let mut summary = ProveBatchSummary::default();
     let total = problem_runs.len();
     for (index, problem_run) in problem_runs.iter().enumerate() {
@@ -278,6 +364,9 @@ fn prove_paths(problem_runs: &[ProblemRun], options: &ProveCommand, cancellation
             } else if cancellation.is_requested() {
                 eprintln!("Cancelled before starting the next problem");
             }
+            if cancellation.is_force_requested() {
+                eprintln!("Force cancellation requested; summary printed before exit.");
+            }
         }
         OutputFormat::Tsv => {
             println!(
@@ -292,20 +381,20 @@ fn prove_paths(problem_runs: &[ProblemRun], options: &ProveCommand, cancellation
                 summary.not_implemented,
                 summary.error,
                 summary.failed_to_process,
-                summary.interrupted_problem.unwrap_or_default()
+                summary.interrupted_problem.as_deref().unwrap_or_default()
             );
         }
     }
 
     if options.format == OutputFormat::Human && !summary.failed_files.is_empty() {
         eprintln!("Failed files:");
-        for path in summary.failed_files {
+        for path in &summary.failed_files {
             eprintln!("  {}", path.display());
         }
     }
 
-    if summary.failed_to_process > 0 || summary.cancelled > 0 || cancellation.is_requested() {
-        std::process::exit(1);
+    if let Some(code) = prove_batch_exit_code(&summary, cancellation) {
+        std::process::exit(code);
     }
 }
 
@@ -473,6 +562,9 @@ fn inspect_rules_paths(
             if summary.cancelled {
                 eprintln!("Cancelled before starting the next problem");
             }
+            if cancellation.is_force_requested() {
+                eprintln!("Force cancellation requested; summary printed before exit.");
+            }
         }
         OutputFormat::Tsv => {
             println!(
@@ -489,13 +581,13 @@ fn inspect_rules_paths(
 
     if options.format == OutputFormat::Human && !summary.failed_files.is_empty() {
         eprintln!("Failed files:");
-        for path in summary.failed_files {
+        for path in &summary.failed_files {
             eprintln!("  {}", path.display());
         }
     }
 
-    if summary.failed > 0 || summary.cancelled {
-        std::process::exit(1);
+    if let Some(code) = rules_batch_exit_code(&summary) {
+        std::process::exit(code);
     }
 }
 
@@ -611,7 +703,7 @@ fn format_rule_match(rule_match: RuleMatch) -> String {
 /// Prints single-file rule-inspection status and exits non-zero on failure.
 fn report_single_file(success: bool) {
     if !success {
-        std::process::exit(1);
+        std::process::exit(EXIT_FAILURE);
     }
 }
 
@@ -619,11 +711,11 @@ fn report_single_file(success: bool) {
 fn report_single_prove_file(result: ProveFileResult) {
     match result {
         ProveFileResult::Status(ProofStatus::Cancelled) => {
-            std::process::exit(1);
+            std::process::exit(EXIT_CANCELLED);
         }
         ProveFileResult::Status(_) => {}
         ProveFileResult::ProcessingFailure => {
-            std::process::exit(1);
+            std::process::exit(EXIT_FAILURE);
         }
     }
 }
@@ -680,4 +772,71 @@ fn should_skip_parse_failed_file(path: &Path, options: &impl ParseFailureOptions
 
 fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_interrupt_exits_immediately_before_summary_phase() {
+        let cancellation = CancellationState::uninstalled_for_test();
+
+        assert_eq!(
+            cancellation.record_interrupt(),
+            InterruptEvent::ExitNow(EXIT_CANCELLED)
+        );
+        assert!(cancellation.is_requested());
+        assert!(!cancellation.is_force_requested());
+    }
+
+    #[test]
+    fn repeated_interrupts_request_force_cancellation_once_during_summary_phase() {
+        let cancellation = CancellationState::uninstalled_for_test();
+        cancellation.defer_exit_until_summary();
+        cancellation.set_next_problem(Some("[2/3] SYN968+1".to_string()));
+
+        assert_eq!(
+            cancellation.record_interrupt(),
+            InterruptEvent::FirstCancellation
+        );
+        assert!(cancellation.is_requested());
+        assert!(!cancellation.is_force_requested());
+
+        assert_eq!(
+            cancellation.record_interrupt(),
+            InterruptEvent::ForceCancellation
+        );
+        assert!(cancellation.is_requested());
+        assert!(cancellation.is_force_requested());
+
+        assert_eq!(
+            cancellation.record_interrupt(),
+            InterruptEvent::AlreadyForceCancelled
+        );
+    }
+
+    #[test]
+    fn prove_batch_exit_code_prefers_ctrl_c_exit_code_after_summary() {
+        let cancellation = CancellationState::uninstalled_for_test();
+        cancellation.defer_exit_until_summary();
+        cancellation.record_interrupt();
+        cancellation.record_interrupt();
+        let summary = ProveBatchSummary::default();
+
+        assert_eq!(
+            prove_batch_exit_code(&summary, &cancellation),
+            Some(EXIT_CANCELLED)
+        );
+    }
+
+    #[test]
+    fn rules_batch_exit_code_uses_ctrl_c_exit_code_for_cancelled_runs() {
+        let summary = RulesBatchSummary {
+            cancelled: true,
+            ..RulesBatchSummary::default()
+        };
+
+        assert_eq!(rules_batch_exit_code(&summary), Some(EXIT_CANCELLED));
+    }
 }
