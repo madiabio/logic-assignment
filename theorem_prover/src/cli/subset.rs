@@ -1,3 +1,28 @@
+//! TPTP subset resolution and problem targeting.
+//!
+//! This module handles resolving subset files into concrete TPTP problem paths and managing
+//! subset-based problem filtering.
+//!
+//! ## Subset File Format
+//!
+//! Subset files contain one problem per line with optional metadata:
+//! - Lines starting with `%` are treated as comments
+//! - Empty lines are ignored
+//! - Problem IDs must contain `+` to be considered valid (e.g., `SYN001+1`)
+//! - Optional metadata columns include formula count and atom count
+//!
+//! ## Problem Resolution
+//!
+//! Problems are resolved using the configured TPTP root directory:
+//! - Versioned IDs (e.g., `LCL662+1.001`) prefer exact files when present
+//! - Falls back to base file if versioned variant doesn't exist (e.g., `LCL662+1.p`)
+//!
+//! ## CLI Override Support
+//!
+//! The `resolve_subset_targets_with_paths` function allows CLI flags to override
+//! the default configuration-based resolution. This is the primary entry point
+//! when `--tptp-root` or `--subset-file` are provided.
+
 use crate::cli::config::AppConfig;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,10 +68,25 @@ pub(crate) struct SubsetStats {
 
 /// Resolves the configured subset file into concrete TPTP problem paths.
 pub(crate) fn resolve_subset_targets(config: &AppConfig) -> Vec<ProblemRun> {
-    let subset_contents = fs::read_to_string(&config.default_subset_file).unwrap_or_else(|err| {
+    resolve_subset_targets_with_paths(&config.tptp_root, &config.default_subset_file)
+}
+
+/// Resolves a subset file into concrete TPTP problem paths using explicit paths.
+///
+/// This function allows overriding the default paths from config.toml. It is used
+/// when CLI flags like `--tptp-root` or `--subset-file` are provided.
+///
+/// # Arguments
+/// * `tptp_root` - Path to the TPTP-v9.x.x root directory
+/// * `subset_file` - Path to the subset file describing which problems to process
+pub(crate) fn resolve_subset_targets_with_paths(
+    tptp_root: &Path,
+    subset_file: &Path,
+) -> Vec<ProblemRun> {
+    let subset_contents = fs::read_to_string(subset_file).unwrap_or_else(|err| {
         panic!(
             "failed to read subset file {}: {err}",
-            config.default_subset_file.display()
+            subset_file.display()
         )
     });
 
@@ -54,7 +94,7 @@ pub(crate) fn resolve_subset_targets(config: &AppConfig) -> Vec<ProblemRun> {
         .lines()
         .filter_map(parse_subset_problem_line)
         .map(|(problem_id, subset_stats)| ProblemRun {
-            path: resolve_tptp_problem_path(&config.tptp_root, &problem_id),
+            path: resolve_tptp_problem_path(tptp_root, &problem_id),
             subset_stats,
         })
         .collect()

@@ -1,3 +1,28 @@
+//! Configuration management for the CLI.
+//!
+//! This module handles loading and merging configuration from `config.toml` and CLI overrides.
+//!
+//! ## Configuration Sources
+//!
+//! The CLI accepts configuration from multiple sources with the following precedence:
+//!
+//! 1. **CLI flags** (highest priority)
+//!    - `--tptp-root <PATH>` - Override TPTP root directory
+//!    - `--subset-file <PATH>` - Override subset file path
+//!
+//! 2. **config.toml** (medium priority)
+//!    - `tptp_root` - Path to TPTP-v9.x.x root directory
+//!    - `default_subset_file` - Path to default subset file
+//!
+//! 3. **Interactive prompts** (if config.toml is missing)
+//!    - Prompts user to provide configuration values on first run
+//!
+//! ## Configuration Requirements
+//!
+//! The system requires both a TPTP root directory and a subset file to run. If either is
+//! missing from all sources, the command will fail with an error message indicating which
+//! setting is missing and how to provide it.
+
 use crate::cli::args::ProveCommand;
 use std::fs;
 use std::io::{self, Write};
@@ -32,6 +57,15 @@ pub(crate) enum EnsureConfigError {
     Aborted,
 }
 
+/// Errors that can occur when validating TPTP configuration.
+#[derive(Debug)]
+pub(crate) enum TptpConfigError {
+    /// Missing TPTP root directory from both CLI and config.
+    MissingTptpRoot,
+    /// Missing subset file from both CLI and config.
+    MissingSubsetFile,
+}
+
 /// Loads `config.toml` when it is valid, otherwise returns `None`.
 pub(crate) fn load_config_if_present() -> Option<AppConfig> {
     load_config().ok()
@@ -51,6 +85,37 @@ pub(crate) fn ensure_config() -> Result<AppConfig, EnsureConfigError> {
             }
         }
     }
+}
+
+/// Validates and merges TPTP configuration from CLI arguments and config.toml.
+///
+/// Precedence:
+/// 1. CLI flags (`tptp_root` and `subset_file` from options)
+/// 2. Config.toml values
+/// 3. Error if both sources are incomplete
+///
+/// # Arguments
+/// * `options` - CLI arguments that may contain overrides
+/// * `config` - Loaded configuration from config.toml (if available)
+///
+/// # Returns
+/// A tuple `(tptp_root, subset_file)` with resolved paths, or an error if validation fails.
+pub(crate) fn validate_and_merge_tptp_config(
+    cli_tptp_root: Option<&PathBuf>,
+    cli_subset_file: Option<&PathBuf>,
+    config: Option<&AppConfig>,
+) -> Result<(PathBuf, PathBuf), TptpConfigError> {
+    let tptp_root = cli_tptp_root
+        .cloned()
+        .or_else(|| config.map(|c| c.tptp_root.clone()))
+        .ok_or(TptpConfigError::MissingTptpRoot)?;
+
+    let subset_file = cli_subset_file
+        .cloned()
+        .or_else(|| config.map(|c| c.default_subset_file.clone()))
+        .ok_or(TptpConfigError::MissingSubsetFile)?;
+
+    Ok((tptp_root, subset_file))
 }
 
 /// Builds prover options using CLI overrides, then config defaults, then
@@ -271,8 +336,9 @@ fn write_config(config: &AppConfig) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::load_config;
+    use super::{load_config, validate_and_merge_tptp_config, AppConfig, TptpConfigError};
     use std::fs;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -302,5 +368,85 @@ mod tests {
         assert_eq!(config.max_fresh_terms_per_quantifier, Some(2));
         assert_eq!(config.max_biconditionals, Some(12));
         assert_eq!(config.default_subset_file.to_string_lossy(), "subset.txt");
+    }
+
+    #[test]
+    fn validate_and_merge_tptp_config_prefers_cli_overrides() {
+        let tptp_root = PathBuf::from("/cli/tptp");
+        let subset_file = PathBuf::from("/cli/subset.txt");
+        let config = AppConfig {
+            tptp_root: PathBuf::from("/config/tptp"),
+            default_subset_file: PathBuf::from("/config/subset.txt"),
+            timeout_ms: None,
+            max_depth: None,
+            max_steps: None,
+            max_fresh_terms_per_quantifier: None,
+            max_biconditionals: None,
+        };
+
+        let result = validate_and_merge_tptp_config(
+            Some(&tptp_root),
+            Some(&subset_file),
+            Some(&config),
+        );
+
+        assert!(result.is_ok());
+        let (resolved_root, resolved_file) = result.unwrap();
+        assert_eq!(resolved_root, tptp_root);
+        assert_eq!(resolved_file, subset_file);
+    }
+
+    #[test]
+    fn validate_and_merge_tptp_config_falls_back_to_config() {
+        let config = AppConfig {
+            tptp_root: PathBuf::from("/config/tptp"),
+            default_subset_file: PathBuf::from("/config/subset.txt"),
+            timeout_ms: None,
+            max_depth: None,
+            max_steps: None,
+            max_fresh_terms_per_quantifier: None,
+            max_biconditionals: None,
+        };
+
+        let result = validate_and_merge_tptp_config(None, None, Some(&config));
+
+        assert!(result.is_ok());
+        let (resolved_root, resolved_file) = result.unwrap();
+        assert_eq!(resolved_root, config.tptp_root);
+        assert_eq!(resolved_file, config.default_subset_file);
+    }
+
+    #[test]
+    fn validate_and_merge_tptp_config_fails_when_missing_tptp_root() {
+        let result = validate_and_merge_tptp_config(None, None, None);
+        assert!(matches!(result, Err(TptpConfigError::MissingTptpRoot)));
+    }
+
+    #[test]
+    fn validate_and_merge_tptp_config_fails_when_missing_subset_file() {
+        let tptp_root = PathBuf::from("/cli/tptp");
+        let result = validate_and_merge_tptp_config(Some(&tptp_root), None, None);
+        assert!(matches!(result, Err(TptpConfigError::MissingSubsetFile)));
+    }
+
+    #[test]
+    fn validate_and_merge_tptp_config_cli_partial_falls_back_to_config() {
+        let cli_tptp_root = PathBuf::from("/cli/tptp");
+        let config = AppConfig {
+            tptp_root: PathBuf::from("/config/tptp"),
+            default_subset_file: PathBuf::from("/config/subset.txt"),
+            timeout_ms: None,
+            max_depth: None,
+            max_steps: None,
+            max_fresh_terms_per_quantifier: None,
+            max_biconditionals: None,
+        };
+
+        let result = validate_and_merge_tptp_config(Some(&cli_tptp_root), None, Some(&config));
+
+        assert!(result.is_ok());
+        let (resolved_root, resolved_file) = result.unwrap();
+        assert_eq!(resolved_root, cli_tptp_root);
+        assert_eq!(resolved_file, config.default_subset_file);
     }
 }

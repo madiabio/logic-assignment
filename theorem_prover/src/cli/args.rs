@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
 
 /// Retry/display flags shared across CLI subcommands.
 #[derive(Clone, Args)]
@@ -85,6 +86,22 @@ pub(crate) struct ProveCommand {
     /// Output format.
     #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
     pub(crate) format: OutputFormat,
+    /// Path to the TPTP-v9.x.x root directory.
+    ///
+    /// This overrides the `tptp_root` setting from config.toml. When provided,
+    /// must be used together with `--subset-file`. If neither is provided, the
+    /// tool falls back to config.toml. If config.toml is missing or incomplete,
+    /// the tool will prompt or exit with an error.
+    #[arg(long, value_name = "PATH")]
+    pub(crate) tptp_root: Option<PathBuf>,
+    /// Path to the subset file describing which TPTP problems to process.
+    ///
+    /// This overrides the `default_subset_file` setting from config.toml.
+    /// When provided, must be used together with `--tptp-root`. If neither
+    /// is provided, the tool falls back to config.toml. If config.toml is
+    /// missing or incomplete, the tool will prompt or exit with an error.
+    #[arg(long, value_name = "PATH")]
+    pub(crate) subset_file: Option<PathBuf>,
     /// Input `.p` file or directory of `.p` files to prove.
     pub(crate) target: Option<String>,
 }
@@ -99,6 +116,22 @@ pub(crate) struct RulesCommand {
     /// Output format.
     #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
     pub(crate) format: OutputFormat,
+    /// Path to the TPTP-v9.x.x root directory.
+    ///
+    /// This overrides the `tptp_root` setting from config.toml. When provided,
+    /// must be used together with `--subset-file`. If neither is provided, the
+    /// tool falls back to config.toml. If config.toml is missing or incomplete,
+    /// the tool will prompt or exit with an error.
+    #[arg(long, value_name = "PATH")]
+    pub(crate) tptp_root: Option<PathBuf>,
+    /// Path to the subset file describing which TPTP problems to process.
+    ///
+    /// This overrides the `default_subset_file` setting from config.toml.
+    /// When provided, must be used together with `--tptp-root`. If neither
+    /// is provided, the tool falls back to config.toml. If config.toml is
+    /// missing or incomplete, the tool will prompt or exit with an error.
+    #[arg(long, value_name = "PATH")]
+    pub(crate) subset_file: Option<PathBuf>,
     /// Input `.p` file or directory of `.p` files to inspect.
     pub(crate) target: Option<String>,
 }

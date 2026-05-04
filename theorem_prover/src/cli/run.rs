@@ -1,14 +1,38 @@
+//! Command dispatch and execution for the CLI.
+//!
+//! This module coordinates the high-level flow of CLI commands, including:
+//! - Parsing command-line options
+//! - Resolving configuration from CLI flags and config.toml
+//! - Dispatching to appropriate proof or rule inspection handlers
+//!
+//! ## Configuration Resolution
+//!
+//! When a subset-based run is requested (i.e., no direct target file is provided),
+//! the command resolves TPTP configuration in the following order:
+//!
+//! 1. CLI flags: `--tptp-root` and `--subset-file`
+//! 2. Config.toml values: `tptp_root` and `default_subset_file`
+//! 3. Error: If neither source provides both values
+//!
+//! See `resolve_tptp_config_or_exit` for implementation details.
+//!
+//! ## Direct Target Handling
+//!
+//! When a direct target (file or directory) is provided via positional argument,
+//! configuration is not used, and the target is processed directly.
+
 use crate::cli::args::{OutputFormat, ProveCommand, RulesCommand};
 use crate::cli::cancel::{CancellationState, EXIT_FAILURE};
 use crate::cli::config::{
-    EnsureConfigError, biconditional_policy_from_cli, ensure_config, prover_options_from_cli,
+    TptpConfigError, biconditional_policy_from_cli, prover_options_from_cli,
+    validate_and_merge_tptp_config,
 };
 use crate::cli::output::{print_prove_preamble, print_rules_preamble};
 use crate::cli::prove::{prove_directory, prove_file, prove_paths, report_single_prove_file};
 use crate::cli::rules::{
     inspect_rules_directory, inspect_rules_file, inspect_rules_paths, report_single_file,
 };
-use crate::cli::subset::{ProblemRun, resolve_subset_targets};
+use crate::cli::subset::{ProblemRun, resolve_subset_targets_with_paths};
 use std::path::Path;
 use theorem_prover::{BiconditionalPolicy, ProofOptions};
 
@@ -80,7 +104,7 @@ fn rules_settings_comment(
 }
 
 /// Dispatches the `prove` command across direct targets or configured subset
-/// runs.
+/// runs. Handles CLI overrides for `--tptp-root` and `--subset-file`.
 pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let cancellation = CancellationState::install();
     let proof_options = prover_options_from_cli(options);
@@ -108,15 +132,18 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
         return;
     }
 
-    let config = require_config_or_exit();
+    let (tptp_root, subset_file) = resolve_tptp_config_or_exit(
+        options.tptp_root.as_ref(),
+        options.subset_file.as_ref(),
+    );
     cancellation.defer_exit_until_summary();
-    let targets = resolve_subset_targets(&config);
+    let targets = resolve_subset_targets_with_paths(&tptp_root, &subset_file);
     print_prove_preamble(options.format, Some(targets.len()), &settings);
     prove_paths(&targets, options, &cancellation);
 }
 
 /// Dispatches the `rules` command across direct targets or configured subset
-/// runs.
+/// runs. Handles CLI overrides for `--tptp-root` and `--subset-file`.
 pub(crate) fn run_rules_mode(options: &RulesCommand) {
     let cancellation = CancellationState::install();
     let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
@@ -142,17 +169,39 @@ pub(crate) fn run_rules_mode(options: &RulesCommand) {
         return;
     }
 
-    let config = require_config_or_exit();
+    let (tptp_root, subset_file) = resolve_tptp_config_or_exit(
+        options.tptp_root.as_ref(),
+        options.subset_file.as_ref(),
+    );
     cancellation.defer_exit_until_summary();
-    let targets = resolve_subset_targets(&config);
+    let targets = resolve_subset_targets_with_paths(&tptp_root, &subset_file);
     print_rules_preamble(options.format, Some(targets.len()), &settings);
     inspect_rules_paths(&targets, options, &cancellation);
 }
 
-/// Loads or creates the local CLI config, exiting when the user declines repair.
-fn require_config_or_exit() -> crate::cli::config::AppConfig {
-    match ensure_config() {
-        Ok(config) => config,
-        Err(EnsureConfigError::Aborted) => std::process::exit(EXIT_FAILURE),
+/// Resolves TPTP configuration from CLI overrides and config.toml, exiting on error.
+///
+/// Precedence:
+/// 1. CLI flags (--tptp-root, --subset-file)
+/// 2. Config.toml values
+/// 3. Exit with error if both sources are incomplete
+fn resolve_tptp_config_or_exit(
+    cli_tptp_root: Option<&std::path::PathBuf>,
+    cli_subset_file: Option<&std::path::PathBuf>,
+) -> (std::path::PathBuf, std::path::PathBuf) {
+    let config = crate::cli::config::load_config_if_present();
+
+    match validate_and_merge_tptp_config(cli_tptp_root, cli_subset_file, config.as_ref()) {
+        Ok((tptp_root, subset_file)) => (tptp_root, subset_file),
+        Err(TptpConfigError::MissingTptpRoot) => {
+            eprintln!("error: TPTP root directory not found");
+            eprintln!("  provide --tptp-root <PATH> or set tptp_root in config.toml");
+            std::process::exit(EXIT_FAILURE);
+        }
+        Err(TptpConfigError::MissingSubsetFile) => {
+            eprintln!("error: subset file not found");
+            eprintln!("  provide --subset-file <PATH> or set default_subset_file in config.toml");
+            std::process::exit(EXIT_FAILURE);
+        }
     }
 }
