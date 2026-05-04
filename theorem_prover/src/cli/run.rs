@@ -553,6 +553,31 @@ fn prove_file(
             eprintln!("{err}");
             ProveFileResult::ProcessingFailure
         }
+        Err(ProblemPipelineError::UnsupportedInclude) => {
+            clear_parse_failure_marker(&problem_run.path);
+            let elapsed_ms = started_at.elapsed().as_millis();
+            let status = ProofStatus::Unknown;
+            let detail = human_unknown_reason(theorem_prover::UnknownReason::UnsupportedInclude);
+            let human_status = format!("unknown ({detail})");
+            match options.format {
+                OutputFormat::Human => print_prove_human_row(
+                    current,
+                    total,
+                    &problem_id,
+                    human_status.as_str(),
+                    elapsed_ms,
+                    problem_run.human_formulae(),
+                    problem_run.human_atoms(),
+                    &problem_run.path,
+                ),
+                OutputFormat::Tsv => println!(
+                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\t{:?}\t{elapsed_ms}\t{detail}",
+                    problem_run.path.display(),
+                    status
+                ),
+            }
+            ProveFileResult::Status(status)
+        }
         Err(ProblemPipelineError::SequentBuild(err)) => {
             match options.format {
                 OutputFormat::Human => print_prove_human_row(
@@ -794,6 +819,34 @@ fn inspect_rules_file(
                 success: false,
                 had_rule_match: false,
                 skipped_by_policy: false,
+            }
+        }
+        Err(ProblemPipelineError::UnsupportedInclude) => {
+            clear_parse_failure_marker(&problem_run.path);
+            let detail = human_unknown_reason(theorem_prover::UnknownReason::UnsupportedInclude);
+            match options.format {
+                OutputFormat::Human => print_rules_human_row(
+                    current,
+                    total,
+                    &problem_id,
+                    true,
+                    false,
+                    problem_run.human_formulae(),
+                    problem_run.human_atoms(),
+                    &problem_run.path,
+                ),
+                OutputFormat::Tsv => println!(
+                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\ttrue\tfalse\t{detail}",
+                    problem_run.path.display()
+                ),
+            }
+            if options.format == OutputFormat::Human {
+                println!("  {detail}");
+            }
+            RulesInspectionResult {
+                success: true,
+                had_rule_match: false,
+                skipped_by_policy: true,
             }
         }
         Err(ProblemPipelineError::SequentBuild(err)) => {

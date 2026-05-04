@@ -1,9 +1,11 @@
 use std::sync::atomic::AtomicBool;
 
+use crate::parser::Rule;
 use crate::{
     ParsedProblem, ProofOptions, ProofResult, Sequent, SequentBuildError, UnknownReason,
-    parse_problem, prove_with_cancel,
+    parse_problem, parse_tptp, prove_with_cancel,
 };
+use pest::iterators::Pair;
 
 /// Pre-search input policy shared by the CLI and pipeline helpers.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -54,11 +56,16 @@ impl Default for RunProblemOptions<'static> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProblemPipelineError {
     Parse(String),
+    UnsupportedInclude,
     SequentBuild(SequentBuildError),
 }
 
 /// Builds the initial sequent for one parsed problem input.
 pub fn build_problem_sequent(input: &str) -> Result<Sequent, ProblemPipelineError> {
+    if contains_include_directive(input)? {
+        return Err(ProblemPipelineError::UnsupportedInclude);
+    }
+
     let parsed: ParsedProblem =
         parse_problem(input).map_err(|err| ProblemPipelineError::Parse(err.to_string()))?;
     Sequent::from_parsed_problem(parsed).map_err(ProblemPipelineError::SequentBuild)
@@ -81,6 +88,13 @@ pub fn run_problem_with_options(
         });
     }
 
+    if contains_include_directive(input)? {
+        return Ok(ProofResult {
+            status: crate::ProofStatus::Unknown,
+            unknown_reason: Some(UnknownReason::UnsupportedInclude),
+        });
+    }
+
     static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
     let cancel_requested = options.cancel_requested.unwrap_or(&NEVER_CANCELLED);
     let sequent = build_problem_sequent(input)?;
@@ -100,4 +114,14 @@ fn count_non_comment_biconditionals(input: &str) -> usize {
         count += line.matches("<=>").count();
     }
     count
+}
+
+fn contains_include_directive(input: &str) -> Result<bool, ProblemPipelineError> {
+    let pairs = parse_tptp(input).map_err(|err| ProblemPipelineError::Parse(err.to_string()))?;
+    Ok(pairs.into_iter().any(pair_contains_include_directive))
+}
+
+fn pair_contains_include_directive(pair: Pair<'_, Rule>) -> bool {
+    pair.as_rule() == Rule::include_directive
+        || pair.into_inner().any(pair_contains_include_directive)
 }

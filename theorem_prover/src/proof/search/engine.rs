@@ -38,6 +38,8 @@ use crate::proof::search::scheduler::{ScheduleResult, ScheduledRule, schedule_ne
 pub enum UnknownReason {
     /// Input processing was skipped because the configured biconditional cap was exceeded.
     BiconditionalCapExceeded,
+    /// Input contains a TPTP include directive, which is not loaded yet.
+    UnsupportedInclude,
     /// Search reached the configured recursive branch depth limit.
     MaxDepthExceeded,
     /// Search reached the configured proof-step limit.

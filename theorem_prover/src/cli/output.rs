@@ -113,6 +113,7 @@ pub(crate) fn human_proof_status(status: &ProofStatus) -> &'static str {
 pub(crate) fn human_unknown_reason(reason: UnknownReason) -> &'static str {
     match reason {
         UnknownReason::BiconditionalCapExceeded => "biconditional_cap",
+        UnknownReason::UnsupportedInclude => "unsupported_include",
         UnknownReason::MaxDepthExceeded => "max_depth",
         UnknownReason::MaxStepsExceeded => "max_steps",
         UnknownReason::QuantifierBudgetExceeded => "quantifier_budget",

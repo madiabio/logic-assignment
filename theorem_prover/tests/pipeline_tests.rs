@@ -1,6 +1,6 @@
 use theorem_prover::{
     BiconditionalPolicy, ProblemPipelineError, ProofOptions, ProofStatus, RunProblemOptions,
-    UnknownReason, run_problem, run_problem_with_options,
+    UnknownReason, build_problem_sequent, run_problem, run_problem_with_options,
 };
 
 #[test]
@@ -167,6 +167,36 @@ p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
         result.unknown_reason,
         Some(UnknownReason::BiconditionalCapExceeded)
     );
+}
+
+#[test]
+fn run_problem_returns_unknown_for_unsupported_include() {
+    let result = run_problem(
+        r#"
+include('Axioms/GEO008+0.ax').
+fof(conj_1,conjecture,p).
+"#,
+    )
+    .expect("pipeline should return an inconclusive proof result");
+
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(
+        result.unknown_reason,
+        Some(UnknownReason::UnsupportedInclude)
+    );
+}
+
+#[test]
+fn build_problem_sequent_rejects_unsupported_include() {
+    let err = build_problem_sequent(
+        r#"
+include('Axioms/GEO008+0.ax').
+fof(conj_1,conjecture,p).
+"#,
+    )
+    .expect_err("sequent construction must not ignore include directives");
+
+    assert_eq!(err, ProblemPipelineError::UnsupportedInclude);
 }
 
 #[test]
