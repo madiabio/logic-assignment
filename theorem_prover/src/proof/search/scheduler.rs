@@ -93,8 +93,11 @@ pub(crate) fn schedule_next_rules(
     state: &BranchState,
     max_fresh_terms_per_quantifier: usize,
 ) -> ScheduleResult {
+    // First collect every rule that is structurally applicable to this sequent.
     let rule_matches = find_applicable_rules(sequent);
 
+    // Priority 1: closing rules.
+    // These can immediately close a branch, so they should always be tried first.
     let mut scheduled = Vec::new();
     for rule_match in &rule_matches {
         if matches!(rule_match.rule, Rule::Id | Rule::TopR | Rule::BottomL) {
@@ -105,6 +108,8 @@ pub(crate) fn schedule_next_rules(
         return ScheduleResult::Rules(scheduled);
     }
 
+    // Priority 2: non-branching / invertible rules.
+    // These usually simplify the sequent without introducing search branching.
     let mut scheduled = Vec::new();
     for rule_match in &rule_matches {
         if matches!(
@@ -124,6 +129,9 @@ pub(crate) fn schedule_next_rules(
         return ScheduleResult::Rules(scheduled);
     }
 
+    // Priority 3: branching propositional rules.
+    // These create multiple premises, so they are delayed until simpler rules
+    // have been exhausted.
     let mut scheduled = Vec::new();
     for rule_match in &rule_matches {
         if matches!(rule_match.rule, Rule::AndR | Rule::OrL | Rule::ImpliesL) {
@@ -134,12 +142,17 @@ pub(crate) fn schedule_next_rules(
         return ScheduleResult::Rules(scheduled);
     }
 
+    // Priority 4: reusable quantifier rules.
+    // `ForAllL` and `ExistsR` require choosing an instantiation term, so they
+    // go through special scheduling logic instead of being applied directly.
     let mut scheduled = Vec::new();
     let mut saw_reusable_quantifier = false;
     for rule_match in &rule_matches {
         if matches!(rule_match.rule, Rule::ForAllL | Rule::ExistsR) {
             saw_reusable_quantifier = true;
         }
+
+        // Try unused visible terms first, then bounded fresh fallback terms.
         for next_rule in schedule_quantifier_instantiations(
             sequent,
             state,
@@ -153,6 +166,9 @@ pub(crate) fn schedule_next_rules(
         return ScheduleResult::Rules(scheduled);
     }
 
+    // If a reusable quantifier was present but produced no instantiations, then
+    // search stopped because the quantifier budget/history was exhausted, not
+    // because the branch is genuinely saturated.
     if saw_reusable_quantifier {
         ScheduleResult::QuantifierExhausted
     } else {
@@ -160,16 +176,51 @@ pub(crate) fn schedule_next_rules(
     }
 }
 
-/// Schedules current branch-term instantiations, then bounded fresh fallback.
+/// Schedules instantiations for a reusable quantifier rule.
+///
+/// This handles the special search policy for `ForAllL` and `ExistsR`.
+/// Unlike most rules, these require choosing a term to instantiate the
+/// quantified variable with.
+///
+/// Scheduling proceeds in two stages:
+///
+/// 1. Try each currently visible branch term that has not already been used for
+///    this quantified occurrence.
+/// 2. If no visible terms remain, schedule one fresh fallback term if the
+///    per-quantifier fresh-term budget allows it.
+///
+/// The quantified occurrence is identified using [`quantified_occurrence_key`],
+/// and prior usage is read from [`BranchState::quantifier_usage`]. This prevents
+/// repeatedly trying the same instantiation on the same branch.
+///
+/// # Parameters
+///
+/// - `sequent`: The current sequent being searched.
+/// - `state`: Branch-local state tracking previous quantifier instantiations.
+/// - `rule_match`: The matched quantifier rule occurrence to schedule.
+/// - `max_fresh_terms_per_quantifier`: Maximum number of fresh fallback terms
+///   allowed for this quantified occurrence.
+///
+/// # Returns
+///
+/// A list of scheduled `ForAllL` or `ExistsR` applications. Returns an empty
+/// list if `rule_match` is not a reusable quantifier rule, the occurrence cannot
+/// be keyed, or no further instantiations are allowed.
 fn schedule_quantifier_instantiations(
     sequent: &Sequent,
     state: &BranchState,
     rule_match: &RuleMatch,
     max_fresh_terms_per_quantifier: usize,
 ) -> Vec<ScheduledRule> {
+    // Build a stable key identifying *this specific quantified occurrence*.
+    // If we can't (e.g. not actually a quantifier), nothing to schedule.
     let Some(key) = quantified_occurrence_key(sequent, rule_match.side, rule_match.index) else {
         return Vec::new();
     };
+
+    // Look up how this occurrence has been used on the current branch:
+    // - which terms have already been tried
+    // - how many fresh terms have been introduced
     let usage = state
         .quantifier_usage
         .get(&key)
@@ -177,43 +228,58 @@ fn schedule_quantifier_instantiations(
         .unwrap_or_default();
 
     let mut scheduled = Vec::new();
+
+    // --- Phase 1: reuse existing (visible) terms in the sequent ---
+    // Try every term currently visible in the branch, but only once per occurrence.
     for term in visible_terms_in_sequent(sequent) {
+        // Skip terms we've already used for this occurrence
         if usage.used_terms.contains(&term) {
             continue;
         }
 
+        // Schedule a quantifier rule with this existing term
         scheduled.push(match rule_match.rule {
             Rule::ForAllL => ScheduledRule::ForAllL {
                 rule_match: *rule_match,
                 term,
                 key: key.clone(),
-                fresh_fallback: false,
+                fresh_fallback: false, // this is a reused term
             },
             Rule::ExistsR => ScheduledRule::ExistsR {
                 rule_match: *rule_match,
                 term,
                 key: key.clone(),
-                fresh_fallback: false,
+                fresh_fallback: false, // this is a reused term
             },
+            // Not a reusable quantifier rule → nothing to do here
             _ => return Vec::new(),
         });
     }
 
+    // If we found at least one unused existing term, return those.
+    // We do NOT consider fresh terms yet (priority: reuse first).
     if !scheduled.is_empty() {
         return scheduled;
     }
 
+    // --- Phase 2: fresh fallback ---
+    // No existing terms left → optionally introduce a fresh term.
+    // But only if we haven't exceeded the per-quantifier budget.
     if usage.fresh_terms_used >= max_fresh_terms_per_quantifier {
+        // Budget exhausted → no more instantiations possible for this occurrence
         return Vec::new();
     }
 
+    // Generate a new constant symbol (like w) and wraps it as a term so it can be used as a fresh witness in quantifier instantiation.
     let term = Term::Const(crate::ast::Symbol::User(fresh_branch_term_name(sequent)));
+
+    // Schedule exactly one fresh instantiation
     scheduled.push(match rule_match.rule {
         Rule::ForAllL => ScheduledRule::ForAllL {
             rule_match: *rule_match,
             term,
             key,
-            fresh_fallback: true,
+            fresh_fallback: true, // indicates this is a fresh-term fallback
         },
         Rule::ExistsR => ScheduledRule::ExistsR {
             rule_match: *rule_match,
@@ -227,7 +293,35 @@ fn schedule_quantifier_instantiations(
     scheduled
 }
 
-/// Builds a stable key for one quantified formula occurrence within a sequent.
+/// Constructs a stable identifier for a quantified formula occurrence in a sequent.
+///
+/// This key uniquely identifies a *specific occurrence* of a quantified formula
+/// (`∀` or `∃`) within the sequent, rather than just the formula shape. It is
+/// used to track branch-local quantifier instantiation history (e.g. which terms
+/// have already been used for this occurrence).
+///
+/// The key is composed of:
+///
+/// - The side of the sequent (`Left` or `Right`)
+/// - The ordinal occurrence of this formula among syntactically identical formulas
+///   up to and including `index`
+/// - The string representation of the formula
+///
+/// This ensures that multiple identical quantified formulas in the same sequent
+/// are distinguished by position, while remaining stable across recursive search
+/// steps where the sequent structure is preserved.
+///
+/// # Parameters
+///
+/// - `sequent`: The current sequent containing the formula.
+/// - `side`: Which side of the sequent (`Γ` or `Δ`) to inspect.
+/// - `index`: The index of the formula within that side.
+///
+/// # Returns
+///
+/// - `Some(String)` containing a unique key if the formula at the given position
+///   is quantified (`∀` or `∃`).
+/// - `None` if the index is out of bounds or the formula is not quantified.
 fn quantified_occurrence_key(sequent: &Sequent, side: Side, index: usize) -> Option<String> {
     let formulas = match side {
         Side::Left => &sequent.left,
