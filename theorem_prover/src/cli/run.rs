@@ -1,8 +1,8 @@
 use crate::cli::args::{OutputFormat, ParseFailureOptions, ProveCommand, RulesCommand};
-use crate::cli::config::{ensure_config, prover_options_from_cli};
+use crate::cli::config::{biconditional_policy_from_cli, ensure_config, prover_options_from_cli};
 use crate::cli::output::{
-    human_proof_status, print_prove_human_row, print_prove_preamble, print_rules_human_row,
-    print_rules_preamble, print_summary_header, print_summary_row,
+    human_proof_result, human_unknown_reason, print_prove_human_row, print_prove_preamble,
+    print_rules_human_row, print_rules_preamble, print_summary_header, print_summary_row,
 };
 use crate::cli::subset::{ProblemRun, resolve_subset_targets, subset_stats_fields};
 use std::fs;
@@ -15,8 +15,8 @@ use std::sync::{
 use std::time::Instant;
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
 use theorem_prover::{
-    ProblemPipelineError, ProofStatus, build_problem_sequent,
-    run_problem_verbose_with_options_and_cancel,
+    BiconditionalPolicy, ProblemPipelineError, ProofOptions, ProofStatus, build_problem_sequent,
+    run_problem_verbose_with_options_and_policy_and_cancel,
 };
 
 const EXIT_FAILURE: i32 = 1;
@@ -35,6 +35,7 @@ enum InterruptEvent {
 struct RulesInspectionResult {
     success: bool,
     had_rule_match: bool,
+    skipped_by_policy: bool,
 }
 
 /// Result of running the prover on one file.
@@ -192,6 +193,7 @@ impl ProveBatchSummary {
 struct RulesBatchSummary {
     processed: usize,
     skipped: usize,
+    skipped_by_policy: usize,
     succeeded: usize,
     failed: usize,
     rule_matches: usize,
@@ -222,17 +224,83 @@ fn rules_batch_exit_code(summary: &RulesBatchSummary) -> Option<i32> {
     }
 }
 
+/// Formats one key/value pair for the `% settings` comment line.
+fn setting(name: &str, value: impl std::fmt::Display) -> String {
+    format!("{name}={value}")
+}
+
+/// Formats an optional integer setting for the `% settings` comment line.
+fn optional_usize_setting(name: &str, value: Option<usize>) -> String {
+    match value {
+        Some(value) => setting(name, value),
+        None => setting(name, "none"),
+    }
+}
+
+/// Formats the effective `prove` settings after config and CLI overrides.
+fn prove_settings_comment(
+    options: &ProveCommand,
+    proof_options: ProofOptions,
+    biconditional_policy: BiconditionalPolicy,
+) -> String {
+    [
+        setting(
+            "format",
+            match options.format {
+                OutputFormat::Human => "human",
+                OutputFormat::Tsv => "tsv",
+            },
+        ),
+        setting("retry_parse_failed", options.run.retry_parse_failed),
+        setting("show_sequent", options.display.show_sequent),
+        setting("timeout_ms", proof_options.timeout.as_millis()),
+        setting("max_depth", proof_options.max_depth),
+        setting("max_steps", proof_options.max_steps),
+        optional_usize_setting(
+            "max_biconditionals",
+            biconditional_policy.max_biconditionals,
+        ),
+    ]
+    .join(" ")
+}
+
+/// Formats the effective `rules` settings after config and CLI overrides.
+fn rules_settings_comment(
+    options: &RulesCommand,
+    biconditional_policy: BiconditionalPolicy,
+) -> String {
+    [
+        setting(
+            "format",
+            match options.format {
+                OutputFormat::Human => "human",
+                OutputFormat::Tsv => "tsv",
+            },
+        ),
+        setting("retry_parse_failed", options.run.retry_parse_failed),
+        setting("show_sequent", options.display.show_sequent),
+        optional_usize_setting(
+            "max_biconditionals",
+            biconditional_policy.max_biconditionals,
+        ),
+    ]
+    .join(" ")
+}
+
 /// Dispatches the `prove` command across direct targets or configured subset
 /// runs.
 pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let cancellation = CancellationState::install();
+    let proof_options = prover_options_from_cli(options);
+    let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
+    let settings = prove_settings_comment(options, proof_options, biconditional_policy);
     if let Some(target) = &options.target {
         cancellation.defer_exit_until_summary();
         let target = Path::new(target);
         if target.is_dir() {
-            prove_directory(target, options, &cancellation);
+            prove_directory(target, options, &cancellation, &settings);
         } else {
-            print_prove_preamble(options.format, None);
+            print_prove_preamble(options.format, None, &settings);
             let result = prove_file(
                 &ProblemRun {
                     path: target.to_path_buf(),
@@ -251,7 +319,7 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let config = ensure_config();
     cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets(&config);
-    print_prove_preamble(options.format, Some(targets.len()));
+    print_prove_preamble(options.format, Some(targets.len()), &settings);
     prove_paths(&targets, options, &cancellation);
 }
 
@@ -259,13 +327,15 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
 /// runs.
 pub(crate) fn run_rules_mode(options: &RulesCommand) {
     let cancellation = CancellationState::install();
+    let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
+    let settings = rules_settings_comment(options, biconditional_policy);
     if let Some(target) = &options.target {
         cancellation.defer_exit_until_summary();
         let target = Path::new(target);
         if target.is_dir() {
-            inspect_rules_directory(target, options, &cancellation);
+            inspect_rules_directory(target, options, &cancellation, &settings);
         } else {
-            print_rules_preamble(options.format, None);
+            print_rules_preamble(options.format, None, &settings);
             let result = inspect_rules_file(
                 &ProblemRun {
                     path: target.to_path_buf(),
@@ -284,12 +354,17 @@ pub(crate) fn run_rules_mode(options: &RulesCommand) {
     let config = ensure_config();
     cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets(&config);
-    print_rules_preamble(options.format, Some(targets.len()));
+    print_rules_preamble(options.format, Some(targets.len()), &settings);
     inspect_rules_paths(&targets, options, &cancellation);
 }
 
 /// Runs the prover over every `.p` file in a directory and prints per-status totals.
-fn prove_directory(dir: &Path, options: &ProveCommand, cancellation: &CancellationState) {
+fn prove_directory(
+    dir: &Path,
+    options: &ProveCommand,
+    cancellation: &CancellationState,
+    settings: &str,
+) {
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     let mut problem_runs = Vec::new();
     for entry in entries {
@@ -306,7 +381,7 @@ fn prove_directory(dir: &Path, options: &ProveCommand, cancellation: &Cancellati
         });
     }
 
-    print_prove_preamble(options.format, None);
+    print_prove_preamble(options.format, None, settings);
     prove_paths(&problem_runs, options, cancellation);
 }
 
@@ -409,33 +484,40 @@ fn prove_file(
 ) -> ProveFileResult {
     let input = fs::read_to_string(&problem_run.path).expect("Failed to read input file");
     let proof_options = prover_options_from_cli(options);
+    let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
     let started_at = Instant::now();
     let problem_id = problem_run.problem_id();
     let (formulae, atoms) = subset_stats_fields(problem_run.subset_stats);
 
-    match run_problem_verbose_with_options_and_cancel(
+    match run_problem_verbose_with_options_and_policy_and_cancel(
         &input,
         options.display.show_sequent,
         proof_options,
+        biconditional_policy,
         cancellation.flag(),
     ) {
         Ok(result) => {
             clear_parse_failure_marker(&problem_run.path);
             let elapsed_ms = started_at.elapsed().as_millis();
-            let status = result.status;
+            let status = result.status.clone();
+            let detail = result
+                .unknown_reason
+                .map(human_unknown_reason)
+                .unwrap_or_default();
+            let human_status = human_proof_result(&result);
             match options.format {
                 OutputFormat::Human => print_prove_human_row(
                     current,
                     total,
                     &problem_id,
-                    human_proof_status(&status),
+                    human_status.as_str(),
                     elapsed_ms,
                     problem_run.human_formulae(),
                     problem_run.human_atoms(),
                     &problem_run.path,
                 ),
                 OutputFormat::Tsv => println!(
-                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\t{:?}\t{elapsed_ms}",
+                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\t{:?}\t{elapsed_ms}\t{detail}",
                     problem_run.path.display(),
                     status
                 ),
@@ -487,7 +569,12 @@ fn prove_file(
 }
 
 /// Runs rule inspection over every `.p` file in a directory and prints aggregate counts.
-fn inspect_rules_directory(dir: &Path, options: &RulesCommand, cancellation: &CancellationState) {
+fn inspect_rules_directory(
+    dir: &Path,
+    options: &RulesCommand,
+    cancellation: &CancellationState,
+    settings: &str,
+) {
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     let mut problem_runs = Vec::new();
     for entry in entries {
@@ -504,7 +591,7 @@ fn inspect_rules_directory(dir: &Path, options: &RulesCommand, cancellation: &Ca
         });
     }
 
-    print_rules_preamble(options.format, None);
+    print_rules_preamble(options.format, None, settings);
     inspect_rules_paths(&problem_runs, options, cancellation);
 }
 
@@ -536,6 +623,9 @@ fn inspect_rules_paths(
 
         summary.processed += 1;
         let inspection = inspect_rules_file(problem_run, options, cancellation, index + 1, total);
+        if inspection.skipped_by_policy {
+            summary.skipped_by_policy += 1;
+        }
         if inspection.had_rule_match {
             summary.rule_matches += 1;
         }
@@ -554,6 +644,7 @@ fn inspect_rules_paths(
             print_summary_row(&[
                 ("processed", summary.processed.to_string()),
                 ("skipped", summary.skipped.to_string()),
+                ("skipped_by_policy", summary.skipped_by_policy.to_string()),
                 ("succeeded", summary.succeeded.to_string()),
                 ("failed", summary.failed.to_string()),
                 ("rule_matches", summary.rule_matches.to_string()),
@@ -568,9 +659,10 @@ fn inspect_rules_paths(
         }
         OutputFormat::Tsv => {
             println!(
-                "summary\t{}\t{}\t{}\t{}\t{}\t{}",
+                "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 summary.processed,
                 summary.skipped,
+                summary.skipped_by_policy,
                 summary.succeeded,
                 summary.failed,
                 summary.rule_matches,
@@ -602,6 +694,34 @@ fn inspect_rules_file(
     let input = fs::read_to_string(&problem_run.path).expect("Failed to read input file");
     let problem_id = problem_run.problem_id();
     let (formulae, atoms) = subset_stats_fields(problem_run.subset_stats);
+    let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
+
+    if biconditional_policy.is_exceeded_by(&input) {
+        match options.format {
+            OutputFormat::Human => print_rules_human_row(
+                current,
+                total,
+                &problem_id,
+                true,
+                false,
+                problem_run.human_formulae(),
+                problem_run.human_atoms(),
+                &problem_run.path,
+            ),
+            OutputFormat::Tsv => println!(
+                "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\ttrue\tfalse\tbiconditional_cap",
+                problem_run.path.display()
+            ),
+        }
+        if options.format == OutputFormat::Human {
+            println!("  biconditional_cap");
+        }
+        return RulesInspectionResult {
+            success: true,
+            had_rule_match: false,
+            skipped_by_policy: true,
+        };
+    }
 
     match build_problem_sequent(&input) {
         Ok(sequent) => {
@@ -640,6 +760,7 @@ fn inspect_rules_file(
             RulesInspectionResult {
                 success: true,
                 had_rule_match: !matches.is_empty(),
+                skipped_by_policy: false,
             }
         }
         Err(ProblemPipelineError::Parse(err)) => {
@@ -656,7 +777,7 @@ fn inspect_rules_file(
                     &problem_run.path,
                 ),
                 OutputFormat::Tsv => eprintln!(
-                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\tfalse\tfalse",
+                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\tfalse\tfalse\tparse_failed",
                     problem_run.path.display()
                 ),
             }
@@ -664,6 +785,7 @@ fn inspect_rules_file(
             RulesInspectionResult {
                 success: false,
                 had_rule_match: false,
+                skipped_by_policy: false,
             }
         }
         Err(ProblemPipelineError::SequentBuild(err)) => {
@@ -679,7 +801,7 @@ fn inspect_rules_file(
                     &problem_run.path,
                 ),
                 OutputFormat::Tsv => eprintln!(
-                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\tfalse\tfalse",
+                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\tfalse\tfalse\tsequent_build_failed",
                     problem_run.path.display()
                 ),
             }
@@ -687,6 +809,7 @@ fn inspect_rules_file(
             RulesInspectionResult {
                 success: false,
                 had_rule_match: false,
+                skipped_by_policy: false,
             }
         }
     }

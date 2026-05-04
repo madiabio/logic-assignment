@@ -6,7 +6,8 @@ use std::time::Duration;
 
 use theorem_prover::ast::{Formula, Symbol, Term, Var};
 use theorem_prover::{
-    ProofOptions, ProofResult, ProofStatus, Sequent, parse_problem, prove, prove_with_cancel,
+    ProofOptions, ProofResult, ProofStatus, Sequent, UnknownReason, parse_problem, prove,
+    prove_with_cancel,
 };
 
 fn predicate_formula(name: &str) -> Formula {
@@ -64,6 +65,7 @@ fn prove_returns_not_provable_for_atomic_dead_end_sequent() {
         result,
         ProofResult {
             status: ProofStatus::NotProvable,
+            unknown_reason: None,
         }
     );
 }
@@ -336,6 +338,10 @@ fn prove_returns_unknown_when_fresh_exists_right_fallback_is_exhausted() {
     );
 
     assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(
+        result.unknown_reason,
+        Some(UnknownReason::QuantifierBudgetExceeded)
+    );
 }
 
 #[test]
@@ -367,6 +373,7 @@ fn prove_promotes_generated_branch_terms_and_reports_limit_exhaustion_as_unknown
     );
 
     assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxStepsExceeded));
 }
 
 #[test]
@@ -486,6 +493,7 @@ fn prove_returns_unknown_when_depth_limit_is_hit() {
     );
 
     assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxDepthExceeded));
 }
 
 #[test]
@@ -509,6 +517,7 @@ fn prove_returns_unknown_when_step_limit_is_hit() {
     );
 
     assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxStepsExceeded));
 }
 
 #[test]
@@ -525,6 +534,7 @@ fn prove_returns_cancelled_when_flag_is_already_set() {
     let result = prove_with_cancel(&sequent, default_options(), &cancelled);
 
     assert_eq!(result.status, ProofStatus::Cancelled);
+    assert_eq!(result.unknown_reason, None);
 }
 
 #[test]
@@ -549,6 +559,7 @@ fn prove_returns_cancelled_when_flag_is_raised_during_search() {
     );
 
     assert_eq!(result.status, ProofStatus::Cancelled);
+    assert_eq!(result.unknown_reason, None);
 }
 
 #[test]

@@ -6,6 +6,14 @@ pub(crate) struct SharedRunOptions {
     /// Reprocess files that already have a `.parse_failed` marker.
     #[arg(long)]
     pub(crate) retry_parse_failed: bool,
+    /// Skip inputs whose non-comment `<=>` count exceeds this limit.
+    ///
+    /// The gate runs before parsing so large biconditional chains can be
+    /// reported as an intentional policy limit rather than consuming proof
+    /// search resources. `prove` reports `unknown` with a specific reason, and
+    /// `rules` skips inspection without creating a `.parse_failed` marker.
+    #[arg(long)]
+    pub(crate) max_biconditionals: Option<usize>,
 }
 
 /// Display-related flags shared across CLI subcommands.
@@ -56,9 +64,15 @@ pub(crate) struct ProveCommand {
     #[arg(long)]
     pub(crate) timeout_ms: Option<u64>,
     /// Maximum recursive proof-search depth before returning `Unknown`.
+    ///
+    /// Use this to cap branch nesting during backward search. When this bound
+    /// triggers, the output detail reports `max_depth`.
     #[arg(long)]
     pub(crate) max_depth: Option<usize>,
     /// Maximum proof-search steps before returning `Unknown`.
+    ///
+    /// Use this to cap total search work across one proof attempt. When this
+    /// bound triggers, the output detail reports `max_steps`.
     #[arg(long)]
     pub(crate) max_steps: Option<usize>,
     /// Output format.

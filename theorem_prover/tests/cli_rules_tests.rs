@@ -31,6 +31,14 @@ fn write_file(path: &Path, contents: &str) {
     fs::write(path, contents).expect("file should be written");
 }
 
+fn biconditional_chain_problem() -> &'static str {
+    r#"
+fof(conj_1,conjecture,
+    (p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
+     p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14)).
+"#
+}
+
 #[test]
 fn prove_subcommand_without_target_uses_configured_subset() {
     let dir = make_temp_dir("prove_config_subset");
@@ -86,6 +94,16 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
     assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
     assert!(stdout.contains("processed"), "stdout was:\n{stdout}");
+    assert!(
+        stdout
+            .lines()
+            .next()
+            .is_some_and(|line| line.starts_with("% settings ")),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("timeout_ms=1000"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("max_depth=50"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("max_steps=50"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -127,8 +145,9 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(
-        stdout
-            .contains("kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms"),
+        stdout.contains(
+            "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms\tdetail"
+        ),
         "stdout was:\n{stdout}"
     );
     assert!(
@@ -288,7 +307,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(
         stdout.contains(
-            "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tsuccess\thad_rule_match"
+            "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tsuccess\thad_rule_match\tdetail"
         ),
         "stdout was:\n{stdout}"
     );
@@ -301,7 +320,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
         "stdout was:\n{stdout}"
     );
     assert!(
-        stdout.contains("summary\t1\t0\t1\t0\t1"),
+        stdout.contains("summary\t1\t0\t0\t1\t0\t1"),
         "stdout was:\n{stdout}"
     );
 }
@@ -345,6 +364,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(stdout.contains("unknown"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("max_steps"), "stdout was:\n{stdout}");
 }
 
 #[test]
@@ -978,6 +998,181 @@ fof(conj_1,conjecture,p).
     assert!(output.status.success(), "stdout was:\n{stdout}");
     assert!(stdout.contains("bounded_unknown"), "stdout was:\n{stdout}");
     assert!(stdout.contains("unknown"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("max_steps"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prove_subcommand_uses_biconditional_cap_from_config_and_reports_reason() {
+    let dir = make_temp_dir("prove_biconditional_cap_from_config");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(&problem_path, biconditional_chain_problem());
+
+    let subset_path = dir.join("subset_descriptions").join("biconditionals.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_biconditionals = 12\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(stdout.contains("unknown"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("biconditional_cap"),
+        "stdout was:\n{stdout}"
+    );
+}
+
+#[test]
+fn prove_subcommand_tsv_includes_unknown_reason_column() {
+    let dir = make_temp_dir("prove_tsv_unknown_reason");
+    let input = write_problem_file(
+        &dir,
+        "bounded_unknown.p",
+        r#"
+fof(ax_1,axiom,(p & q)).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args([
+            "prove",
+            "--format",
+            "tsv",
+            "--max-steps",
+            "0",
+            input.to_str().expect("path should be utf-8"),
+        ])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains(
+            "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms\tdetail"
+        ),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("\tUnknown\t"), "stdout was:\n{stdout}");
+    assert!(stdout.contains("\tmax_steps"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn rules_subcommand_skips_biconditional_cap_without_parse_failed_marker() {
+    let dir = make_temp_dir("rules_biconditional_cap_skip");
+    let input = write_problem_file(&dir, "too_many_iffs.p", biconditional_chain_problem());
+    let marker = parse_failed_marker_path(&input);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args([
+            "rules",
+            "--max-biconditionals",
+            "12",
+            input.to_str().expect("path should be utf-8"),
+        ])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("biconditional_cap"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        !marker.exists(),
+        "did not expect marker at {}",
+        marker.display()
+    );
+}
+
+#[test]
+fn rules_subcommand_help_describes_biconditional_cap_flag() {
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["rules", "--help"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("--max-biconditionals"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Skip inputs whose non-comment `<=>` count exceeds this limit."),
+        "stdout was:\n{stdout}"
+    );
+}
+
+#[test]
+fn rules_subcommand_prints_effective_settings_comment_line() {
+    let dir = make_temp_dir("rules_settings_comment");
+    let input = write_problem_file(
+        &dir,
+        "identity.p",
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args([
+            "rules",
+            "--show-sequent",
+            "--max-biconditionals",
+            "12",
+            input.to_str().expect("path should be utf-8"),
+        ])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(
+        stdout
+            .lines()
+            .next()
+            .is_some_and(|line| line.starts_with("% settings ")),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("format=human"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("show_sequent=true"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("retry_parse_failed=false"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("max_biconditionals=12"),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]

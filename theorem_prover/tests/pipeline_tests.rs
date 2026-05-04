@@ -1,4 +1,7 @@
-use theorem_prover::{ProblemPipelineError, ProofStatus, run_problem};
+use theorem_prover::{
+    BiconditionalPolicy, ProblemPipelineError, ProofStatus, UnknownReason, run_problem,
+    run_problem_with_options_and_policy,
+};
 
 #[test]
 fn run_problem_returns_not_provable_for_atomic_dead_end_problem() {
@@ -143,22 +146,42 @@ fof(conj_1,conjecture,~ ? [Y] : ! [X] : (a(X,Y) <=> ~ a(X,X))).
 }
 
 #[test]
-fn run_problem_returns_unknown_when_biconditional_rewrite_budget_is_exhausted() {
-    let started_at = std::time::Instant::now();
-    let result = run_problem(
+fn run_problem_returns_unknown_when_biconditional_cap_is_exceeded() {
+    let result = run_problem_with_options_and_policy(
         r#"
-fof(conj_1,conjecture,
-    (p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
-     p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14)).
+p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
+p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
 "#,
+        Default::default(),
+        BiconditionalPolicy {
+            max_biconditionals: Some(12),
+        },
     )
     .expect("pipeline should return an inconclusive proof result");
 
     assert_eq!(result.status, ProofStatus::Unknown);
-    assert!(
-        started_at.elapsed() < std::time::Duration::from_millis(500),
-        "biconditional budget exhaustion should return before exponential rewrite"
+    assert_eq!(
+        result.unknown_reason,
+        Some(UnknownReason::BiconditionalCapExceeded)
     );
+}
+
+#[test]
+fn run_problem_without_biconditional_cap_still_reports_parse_failures() {
+    let err = run_problem_with_options_and_policy(
+        r#"
+p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
+p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
+"#,
+        Default::default(),
+        BiconditionalPolicy::default(),
+    )
+    .expect_err("pipeline should parse input when no biconditional cap is configured");
+
+    match err {
+        ProblemPipelineError::Parse(_) => {}
+        other => panic!("expected parse failure, got {other:?}"),
+    }
 }
 
 #[test]
