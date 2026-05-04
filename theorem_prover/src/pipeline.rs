@@ -130,8 +130,8 @@ pub fn run_problem_from_path_with_options(
         });
     }
 
-    let sequent = Sequent::from_parsed_problem(loaded.parsed)
-        .map_err(ProblemPipelineError::SequentBuild)?;
+    let sequent =
+        Sequent::from_parsed_problem(loaded.parsed).map_err(ProblemPipelineError::SequentBuild)?;
     run_problem_impl(&sequent, options)
 }
 
@@ -190,11 +190,10 @@ fn load_problem_recursive(
 
     stack.push(canonical_path.to_path_buf());
     let input = if is_top_level {
-        top_level_input
-            .map(str::to_owned)
-            .unwrap_or_else(|| read_problem_text(canonical_path).expect(
-                "canonicalized problem path should still be readable",
-            ))
+        top_level_input.map(str::to_owned).unwrap_or_else(|| {
+            read_problem_text(canonical_path)
+                .expect("canonicalized problem path should still be readable")
+        })
     } else {
         read_problem_text(canonical_path)?
     };
@@ -213,14 +212,8 @@ fn load_problem_recursive(
     let conjecture = parsed.conjecture.take();
     for include in parsed.includes {
         let include_path = resolve_include_path(include_root, &include.path)?;
-        let included = load_problem_recursive(
-            &include_path,
-            include_root,
-            false,
-            None,
-            loaded,
-            stack,
-        )?;
+        let included =
+            load_problem_recursive(&include_path, include_root, false, None, loaded, stack)?;
         merged_premises.extend(included.premises);
     }
 
@@ -235,9 +228,9 @@ fn load_problem_recursive(
 fn read_problem_text(path: &Path) -> Result<String, ProblemPipelineError> {
     match fs::read_to_string(path) {
         Ok(input) => Ok(input),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Err(ProblemPipelineError::Include(
-            format!("failed to read {}: {err}", path.display()),
-        )),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Err(
+            ProblemPipelineError::Include(format!("failed to read {}: {err}", path.display())),
+        ),
         Err(err) => Err(ProblemPipelineError::Include(format!(
             "failed to read {}: {err}",
             path.display()
@@ -276,13 +269,10 @@ fn infer_include_root(problem_path: &Path) -> Result<PathBuf, ProblemPipelineErr
         }
     }
 
-    problem_path
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| {
-            ProblemPipelineError::Include(format!(
-                "failed to determine include root for {}",
-                problem_path.display()
-            ))
-        })
+    problem_path.parent().map(Path::to_path_buf).ok_or_else(|| {
+        ProblemPipelineError::Include(format!(
+            "failed to determine include root for {}",
+            problem_path.display()
+        ))
+    })
 }
