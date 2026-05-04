@@ -39,6 +39,23 @@ fof(conj_1,conjecture,
 "#
 }
 
+fn run_with_stdin(current_dir: &Path, args: &[&str], stdin_contents: &str) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(current_dir)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("binary should run");
+
+    let stdin = child.stdin.as_mut().expect("stdin should be available");
+    write!(stdin, "{stdin_contents}").expect("stdin should be writable");
+    drop(child.stdin.take());
+
+    child.wait_with_output().expect("output should be captured")
+}
+
 #[test]
 fn prove_subcommand_without_target_uses_configured_subset() {
     let dir = make_temp_dir("prove_config_subset");
@@ -433,26 +450,15 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 "#,
     );
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .current_dir(&dir)
-        .args(["prove"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("binary should run");
-
-    let stdin = child.stdin.as_mut().expect("stdin should be available");
-    write!(
-        stdin,
-        "{}\n{}\n1000\n50\n50\n1\n",
-        tptp_root.display(),
-        subset_path.display()
-    )
-    .expect("stdin should be writable");
-    drop(child.stdin.take());
-
-    let output = child.wait_with_output().expect("output should be captured");
+    let output = run_with_stdin(
+        &dir,
+        &["prove"],
+        &format!(
+            "{}\n{}\n1000\n50\n50\n1\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -464,6 +470,98 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
         "expected config.toml to be written"
     );
     assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prove_subcommand_with_invalid_config_decline_does_not_overwrite_file() {
+    let dir = make_temp_dir("prove_invalid_config_decline");
+    let config_path = dir.join("config.toml");
+    let original_config = r#"
+tptp_root = "..\TPTP-v9.2.1"
+default_subset_file = "..\subset_descriptions\easy_problems.txt"
+timeout_ms = 100
+max_depth = 50
+max_steps = 50
+max_fresh_terms_per_quantifier =
+"#;
+    write_file(&config_path, original_config);
+
+    let output = run_with_stdin(&dir, &["prove"], "n\n");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !output.status.success(),
+        "expected failure\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("invalid max_fresh_terms_per_quantifier in config.toml"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Replace or repair config.toml now? [y/N]:"),
+        "stdout was:\n{stdout}"
+    );
+    assert_eq!(
+        fs::read_to_string(&config_path).expect("config should still be readable"),
+        original_config
+    );
+}
+
+#[test]
+fn prove_subcommand_with_invalid_config_confirm_rewrites_file_and_continues() {
+    let dir = make_temp_dir("prove_invalid_config_confirm");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(ax_1,axiom,p).
+fof(conj_1,conjecture,p).
+"#,
+    );
+
+    let subset_path = dir.join("subset_descriptions").join("easy_problems.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    let config_path = dir.join("config.toml");
+    write_file(
+        &config_path,
+        "tptp_root = \".\\TPTP-v9.2.1\"\ndefault_subset_file = \".\\subset_descriptions\\easy_problems.txt\"\ntimeout_ms = 100\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier =\n",
+    );
+
+    let output = run_with_stdin(
+        &dir,
+        &["prove"],
+        &format!(
+            "y\n{}\n{}\n1000\n50\n50\n1\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "expected success\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("invalid max_fresh_terms_per_quantifier in config.toml"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
+
+    let rewritten = fs::read_to_string(&config_path).expect("config should be readable");
+    assert!(
+        rewritten.contains("max_fresh_terms_per_quantifier = 1"),
+        "config contents were:\n{rewritten}"
+    );
 }
 
 #[test]

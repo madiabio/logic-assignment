@@ -3,3 +3,5 @@ default_subset_file =
 timeout_ms =
 max_depth =
 max_steps =
+max_biconditionals = 
+max_fresh_terms_per_quantifier = 

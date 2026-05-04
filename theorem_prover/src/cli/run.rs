@@ -1,5 +1,7 @@
 use crate::cli::args::{OutputFormat, ParseFailureOptions, ProveCommand, RulesCommand};
-use crate::cli::config::{biconditional_policy_from_cli, ensure_config, prover_options_from_cli};
+use crate::cli::config::{
+    EnsureConfigError, biconditional_policy_from_cli, ensure_config, prover_options_from_cli,
+};
 use crate::cli::output::{
     human_proof_result, human_unknown_reason, print_prove_human_row, print_prove_preamble,
     print_rules_human_row, print_rules_preamble, print_summary_header, print_summary_row,
@@ -320,7 +322,7 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
         return;
     }
 
-    let config = ensure_config();
+    let config = require_config_or_exit();
     cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets(&config);
     print_prove_preamble(options.format, Some(targets.len()), &settings);
@@ -355,7 +357,7 @@ pub(crate) fn run_rules_mode(options: &RulesCommand) {
         return;
     }
 
-    let config = ensure_config();
+    let config = require_config_or_exit();
     cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets(&config);
     print_rules_preamble(options.format, Some(targets.len()), &settings);
@@ -846,6 +848,13 @@ fn report_single_prove_file(result: ProveFileResult) {
         ProveFileResult::ProcessingFailure => {
             std::process::exit(EXIT_FAILURE);
         }
+    }
+}
+
+fn require_config_or_exit() -> crate::cli::config::AppConfig {
+    match ensure_config() {
+        Ok(config) => config,
+        Err(EnsureConfigError::Aborted) => std::process::exit(EXIT_FAILURE),
     }
 }
 

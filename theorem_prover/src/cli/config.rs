@@ -20,14 +20,37 @@ pub(crate) struct AppConfig {
     pub(crate) max_biconditionals: Option<usize>,
 }
 
+#[derive(Debug)]
+enum ConfigLoadState {
+    Missing,
+    Available(AppConfig),
+    Invalid(String),
+}
+
+#[derive(Debug)]
+pub(crate) enum EnsureConfigError {
+    Aborted,
+}
+
 /// Loads `config.toml` when it is valid, otherwise returns `None`.
 pub(crate) fn load_config_if_present() -> Option<AppConfig> {
     load_config().ok()
 }
 
 /// Returns a usable config, prompting and writing one on first run if needed.
-pub(crate) fn ensure_config() -> AppConfig {
-    load_config().unwrap_or_else(|_| prompt_for_config())
+pub(crate) fn ensure_config() -> Result<AppConfig, EnsureConfigError> {
+    match classify_config_load() {
+        ConfigLoadState::Available(config) => Ok(config),
+        ConfigLoadState::Missing => Ok(prompt_for_config()),
+        ConfigLoadState::Invalid(err) => {
+            println!("config.toml is unusable: {err}");
+            if confirm_repair() {
+                Ok(prompt_for_config())
+            } else {
+                Err(EnsureConfigError::Aborted)
+            }
+        }
+    }
 }
 
 /// Builds prover options using CLI overrides, then config defaults, then
@@ -155,6 +178,18 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
     })
 }
 
+fn classify_config_load() -> ConfigLoadState {
+    let config_path = Path::new("config.toml");
+    if !config_path.exists() {
+        return ConfigLoadState::Missing;
+    }
+
+    match load_config() {
+        Ok(config) => ConfigLoadState::Available(config),
+        Err(err) => ConfigLoadState::Invalid(err),
+    }
+}
+
 /// Prompts for config values and persists them as `config.toml`.
 fn prompt_for_config() -> AppConfig {
     println!("No usable config.toml found. Enter values to create one.");
@@ -187,6 +222,16 @@ fn prompt_for_config() -> AppConfig {
 
     write_config(&config).expect("failed to write config.toml");
     config
+}
+
+fn confirm_repair() -> bool {
+    matches!(
+        prompt("Replace or repair config.toml now? [y/N]")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "y" | "yes"
+    )
 }
 
 /// Prompts for a single config value on stdin/stdout.
