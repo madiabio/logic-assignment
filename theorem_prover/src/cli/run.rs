@@ -25,8 +25,7 @@ use crate::cli::args::{OutputFormat, ProveCommand, RulesCommand};
 use crate::cli::cancel::{CancellationState, EXIT_FAILURE};
 use crate::cli::config::{
     EnsureConfigError, TptpConfigError, biconditional_policy_from_cli, ensure_config,
-    prover_options_from_cli,
-    validate_and_merge_tptp_config,
+    prover_options_from_cli, validate_and_merge_tptp_config,
 };
 use crate::cli::output::{print_prove_preamble, print_rules_preamble};
 use crate::cli::prove::{prove_directory, prove_file, prove_paths, report_single_prove_file};
@@ -133,10 +132,8 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
         return;
     }
 
-    let (tptp_root, subset_file) = resolve_tptp_config_or_exit(
-        options.tptp_root.as_ref(),
-        options.subset_file.as_ref(),
-    );
+    let (tptp_root, subset_file) =
+        resolve_tptp_config_or_exit(options.tptp_root.as_ref(), options.subset_file.as_ref());
     cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets_with_paths(&tptp_root, &subset_file);
     print_prove_preamble(options.format, Some(targets.len()), &settings);
@@ -170,10 +167,8 @@ pub(crate) fn run_rules_mode(options: &RulesCommand) {
         return;
     }
 
-    let (tptp_root, subset_file) = resolve_tptp_config_or_exit(
-        options.tptp_root.as_ref(),
-        options.subset_file.as_ref(),
-    );
+    let (tptp_root, subset_file) =
+        resolve_tptp_config_or_exit(options.tptp_root.as_ref(), options.subset_file.as_ref());
     cancellation.defer_exit_until_summary();
     let targets = resolve_subset_targets_with_paths(&tptp_root, &subset_file);
     print_rules_preamble(options.format, Some(targets.len()), &settings);
