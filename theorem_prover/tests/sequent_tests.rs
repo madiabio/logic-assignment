@@ -24,6 +24,7 @@ fn builds_initial_sequent_from_premises_and_conjecture() {
             formula_record("hyp_1", "hypothesis", premise_two.clone()),
         ],
         conjecture: Some(formula_record("conj_1", "conjecture", conjecture.clone())),
+        includes: Vec::new(),
     };
 
     let sequent = Sequent::from_parsed_problem(parsed).expect("expected sequent to build");
@@ -38,6 +39,7 @@ fn builds_initial_sequent_without_premises() {
     let parsed = ParsedProblem {
         premises: Vec::new(),
         conjecture: Some(formula_record("conj_1", "conjecture", conjecture.clone())),
+        includes: Vec::new(),
     };
 
     let sequent = Sequent::from_parsed_problem(parsed).expect("expected sequent to build");
@@ -51,6 +53,7 @@ fn rejects_problem_without_conjecture() {
     let parsed = ParsedProblem {
         premises: vec![formula_record("ax_1", "axiom", predicate_formula("p"))],
         conjecture: None,
+        includes: Vec::new(),
     };
 
     let err = Sequent::from_parsed_problem(parsed).expect_err("expected missing conjecture");

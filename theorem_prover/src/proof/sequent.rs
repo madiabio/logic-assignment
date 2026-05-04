@@ -25,6 +25,7 @@ impl Sequent {
         let ParsedProblem {
             premises,
             conjecture,
+            ..
         } = parsed;
 
         let left = premises.into_iter().map(|record| record.formula).collect();
