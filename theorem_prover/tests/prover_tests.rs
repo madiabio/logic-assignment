@@ -6,7 +6,8 @@ use std::time::Duration;
 
 use theorem_prover::ast::{Formula, Symbol, Term, Var};
 use theorem_prover::{
-    ProofOptions, ProofResult, ProofStatus, Sequent, parse_problem, prove, prove_with_cancel,
+    ProofOptions, ProofResult, ProofStatus, Sequent, UnknownReason, parse_problem, prove,
+    prove_with_cancel,
 };
 
 fn predicate_formula(name: &str) -> Formula {
@@ -64,6 +65,7 @@ fn prove_returns_not_provable_for_atomic_dead_end_sequent() {
         result,
         ProofResult {
             status: ProofStatus::NotProvable,
+            unknown_reason: None,
         }
     );
 }
@@ -318,7 +320,7 @@ fn prove_reuses_visible_term_for_forall_left_before_fresh_fallback() {
 }
 
 #[test]
-fn prove_stops_after_one_fresh_exists_right_fallback() {
+fn prove_returns_unknown_when_fresh_exists_right_fallback_is_exhausted() {
     let sequent = Sequent {
         left: Vec::new(),
         right: vec![Formula::Exists(
@@ -335,11 +337,15 @@ fn prove_stops_after_one_fresh_exists_right_fallback() {
         },
     );
 
-    assert_eq!(result.status, ProofStatus::NotProvable);
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(
+        result.unknown_reason,
+        Some(UnknownReason::QuantifierBudgetExceeded)
+    );
 }
 
 #[test]
-fn prove_does_not_promote_generated_terms_into_quantifier_candidates() {
+fn prove_promotes_generated_branch_terms_and_reports_limit_exhaustion_as_unknown() {
     let sequent = Sequent {
         left: vec![
             Formula::ForAll(
@@ -361,11 +367,34 @@ fn prove_does_not_promote_generated_terms_into_quantifier_candidates() {
         &sequent,
         ProofOptions {
             timeout: Duration::from_millis(50),
+            max_steps: 8,
             ..default_options()
         },
     );
 
-    assert_eq!(result.status, ProofStatus::NotProvable);
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxStepsExceeded));
+}
+
+#[test]
+fn prove_reconsiders_exists_right_after_forall_right_introduces_eigen_term() {
+    let sequent = Sequent {
+        left: Vec::new(),
+        right: vec![Formula::Exists(
+            vec![var("X")],
+            Box::new(Formula::ForAll(
+                vec![var("Y")],
+                Box::new(Formula::implies(
+                    predicate_formula_with_args("p", vec![variable("X")]),
+                    predicate_formula_with_args("p", vec![variable("Y")]),
+                )),
+            )),
+        )],
+    };
+
+    let result = prove(&sequent, default_options());
+
+    assert_eq!(result.status, ProofStatus::Provable);
 }
 
 #[test]
@@ -423,6 +452,7 @@ fn prove_returns_timeout_for_large_left_branching_search() {
             timeout: Duration::from_millis(1),
             max_depth: usize::MAX,
             max_steps: usize::MAX,
+            ..default_options()
         },
     );
 
@@ -458,10 +488,12 @@ fn prove_returns_unknown_when_depth_limit_is_hit() {
             max_depth: 0,
             timeout: Duration::from_secs(1),
             max_steps: usize::MAX,
+            ..default_options()
         },
     );
 
     assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxDepthExceeded));
 }
 
 #[test]
@@ -480,10 +512,12 @@ fn prove_returns_unknown_when_step_limit_is_hit() {
             max_depth: usize::MAX,
             timeout: Duration::from_secs(1),
             max_steps: 0,
+            ..default_options()
         },
     );
 
     assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxStepsExceeded));
 }
 
 #[test]
@@ -500,6 +534,7 @@ fn prove_returns_cancelled_when_flag_is_already_set() {
     let result = prove_with_cancel(&sequent, default_options(), &cancelled);
 
     assert_eq!(result.status, ProofStatus::Cancelled);
+    assert_eq!(result.unknown_reason, None);
 }
 
 #[test]
@@ -518,11 +553,13 @@ fn prove_returns_cancelled_when_flag_is_raised_during_search() {
             timeout: Duration::from_secs(1),
             max_depth: usize::MAX,
             max_steps: usize::MAX,
+            ..default_options()
         },
         cancelled.as_ref(),
     );
 
     assert_eq!(result.status, ProofStatus::Cancelled);
+    assert_eq!(result.unknown_reason, None);
 }
 
 #[test]

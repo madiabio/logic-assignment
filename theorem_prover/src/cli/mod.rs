@@ -5,8 +5,12 @@
 //! to the executable.
 
 pub(crate) mod args;
+pub(crate) mod cancel;
 pub(crate) mod config;
 pub(crate) mod output;
+pub(crate) mod parse_failure;
+pub(crate) mod prove;
+pub(crate) mod rules;
 pub(crate) mod run;
 pub(crate) mod subset;
 

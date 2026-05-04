@@ -1,15 +1,15 @@
 use crate::cli::args::OutputFormat;
 use std::path::Path;
-use theorem_prover::ProofStatus;
+use theorem_prover::{ProofResult, ProofStatus, UnknownReason};
 
 /// Returns the TSV header row for `prove` output.
 pub(crate) fn prove_tsv_header() -> &'static str {
-    "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms"
+    "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms\tdetail"
 }
 
 /// Returns the TSV header row for `rules` output.
 pub(crate) fn rules_tsv_header() -> &'static str {
-    "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tsuccess\thad_rule_match"
+    "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tsuccess\thad_rule_match\tdetail"
 }
 
 /// Prints the human-readable `prove` table header.
@@ -109,8 +109,38 @@ pub(crate) fn human_proof_status(status: &ProofStatus) -> &'static str {
     }
 }
 
+/// Returns the stable printable detail label for an unknown proof reason.
+pub(crate) fn human_unknown_reason(reason: UnknownReason) -> &'static str {
+    match reason {
+        UnknownReason::BiconditionalCapExceeded => "biconditional_cap",
+        UnknownReason::UnsupportedInclude => "unsupported_include",
+        UnknownReason::MaxDepthExceeded => "max_depth",
+        UnknownReason::MaxStepsExceeded => "max_steps",
+        UnknownReason::QuantifierBudgetExceeded => "quantifier_budget",
+    }
+}
+
+/// Formats the proof status with any available detail for human-readable output.
+pub(crate) fn human_proof_result(result: &ProofResult) -> String {
+    let status = human_proof_status(&result.status);
+    match result.unknown_reason {
+        Some(reason) => format!("{status} ({})", human_unknown_reason(reason)),
+        None => status.to_string(),
+    }
+}
+
+/// Prints a `%`-prefixed comment line describing the effective run settings.
+pub(crate) fn print_settings_comment_line(settings: &str) {
+    println!("% settings {settings}");
+}
+
 /// Prints the correct table header for the selected command/format.
-pub(crate) fn print_prove_preamble(format: OutputFormat, subset_size: Option<usize>) {
+pub(crate) fn print_prove_preamble(
+    format: OutputFormat,
+    subset_size: Option<usize>,
+    settings: &str,
+) {
+    print_settings_comment_line(settings);
     match format {
         OutputFormat::Human => {
             if let Some(count) = subset_size {
@@ -123,7 +153,12 @@ pub(crate) fn print_prove_preamble(format: OutputFormat, subset_size: Option<usi
 }
 
 /// Prints the correct table header for the selected command/format.
-pub(crate) fn print_rules_preamble(format: OutputFormat, subset_size: Option<usize>) {
+pub(crate) fn print_rules_preamble(
+    format: OutputFormat,
+    subset_size: Option<usize>,
+    settings: &str,
+) {
+    print_settings_comment_line(settings);
     match format {
         OutputFormat::Human => {
             if let Some(count) = subset_size {
@@ -147,7 +182,10 @@ mod tests {
     #[test]
     fn human_proof_status_uses_stable_labels() {
         assert_eq!(human_proof_status(&ProofStatus::Provable), "provable");
-        assert_eq!(human_proof_status(&ProofStatus::NotProvable), "not_provable");
+        assert_eq!(
+            human_proof_status(&ProofStatus::NotProvable),
+            "not_provable"
+        );
         assert_eq!(human_proof_status(&ProofStatus::Unknown), "unknown");
         assert_eq!(human_proof_status(&ProofStatus::Cancelled), "cancelled");
     }

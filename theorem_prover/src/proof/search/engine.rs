@@ -1,9 +1,10 @@
 //! Depth-first backward proof search with timeout and bounded search handling.
 //!
 //! Default prover limits are defined by:
-//! - `DEFAULT_PROVE_TIMEOUT`
-//! - `DEFAULT_MAX_DEPTH`
-//! - `DEFAULT_MAX_STEPS`
+//! - [`crate::proof::defaults::DEFAULT_PROVE_TIMEOUT`]
+//! - [`crate::proof::defaults::DEFAULT_MAX_DEPTH`]
+//! - [`crate::proof::defaults::DEFAULT_MAX_STEPS`]
+//! - [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`]
 //!
 //! CLI usage:
 //! - `cargo run -- prove problem.p`
@@ -25,29 +26,50 @@ use crate::Sequent;
 use crate::proof::apply::{
     RuleApplication, apply_exists_r_with_term, apply_forall_l_with_term, apply_rule,
 };
-use crate::proof::quantifier::visible_terms_in_sequent;
+use crate::proof::defaults::{
+    DEFAULT_MAX_DEPTH, DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER, DEFAULT_MAX_STEPS,
+    DEFAULT_PROVE_TIMEOUT,
+};
 use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
-use crate::proof::search::scheduler::{ScheduledRule, schedule_next_rules};
+use crate::proof::search::scheduler::{ScheduleResult, ScheduledRule, schedule_next_rules};
 
-const DEFAULT_PROVE_TIMEOUT: Duration = Duration::from_secs(50);
-const DEFAULT_MAX_DEPTH: usize = 128;
-const DEFAULT_MAX_STEPS: usize = 50_000;
+/// Explains why a proof attempt ended with [`ProofStatus::Unknown`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnknownReason {
+    /// Input processing was skipped because the configured biconditional cap was exceeded.
+    BiconditionalCapExceeded,
+    /// Input contains a TPTP include directive, which is not loaded yet.
+    UnsupportedInclude,
+    /// Search reached the configured recursive branch depth limit.
+    MaxDepthExceeded,
+    /// Search reached the configured proof-step limit.
+    MaxStepsExceeded,
+    /// Search exhausted the fresh fallback terms available for one quantified occurrence.
+    QuantifierBudgetExceeded,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Runtime options controlling proof search.
 pub struct ProofOptions {
     /// Maximum wall-clock time allowed for a single proof attempt.
     ///
-    /// The default comes from `DEFAULT_PROVE_TIMEOUT`.
+    /// The default comes from
+    /// [`crate::proof::defaults::DEFAULT_PROVE_TIMEOUT`].
     pub timeout: Duration,
     /// Maximum recursive branch depth before search returns `Unknown`.
     ///
-    /// The default comes from `DEFAULT_MAX_DEPTH`.
+    /// The default comes from [`crate::proof::defaults::DEFAULT_MAX_DEPTH`].
     pub max_depth: usize,
     /// Maximum search steps before search returns `Unknown`.
     ///
-    /// The default comes from `DEFAULT_MAX_STEPS`.
+    /// The default comes from [`crate::proof::defaults::DEFAULT_MAX_STEPS`].
     pub max_steps: usize,
+    /// Maximum fresh fallback terms for one reusable quantified occurrence.
+    ///
+    /// Exhausting this budget leaves the branch open and returns `Unknown`.
+    /// The default comes from
+    /// [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`].
+    pub max_fresh_terms_per_quantifier: usize,
 }
 
 impl Default for ProofOptions {
@@ -56,6 +78,7 @@ impl Default for ProofOptions {
             timeout: DEFAULT_PROVE_TIMEOUT,
             max_depth: DEFAULT_MAX_DEPTH,
             max_steps: DEFAULT_MAX_STEPS,
+            max_fresh_terms_per_quantifier: DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER,
         }
     }
 }
@@ -83,6 +106,8 @@ pub enum ProofStatus {
 /// Result returned by the public prover API.
 pub struct ProofResult {
     pub status: ProofStatus,
+    /// More specific detail for [`ProofStatus::Unknown`].
+    pub unknown_reason: Option<UnknownReason>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,23 +116,44 @@ enum SearchOutcome {
     Provable,
     NotProvable,
     Timeout,
-    Unknown,
+    Unknown(UnknownReason),
     Cancelled,
     NotImplemented,
     Error,
 }
 
 impl SearchOutcome {
-    /// Converts an internal search outcome into the public proof status.
-    fn into_status(self) -> ProofStatus {
+    /// Converts an internal search outcome into the public proof result.
+    fn into_result(self) -> ProofResult {
         match self {
-            SearchOutcome::Provable => ProofStatus::Provable,
-            SearchOutcome::Timeout => ProofStatus::Timeout,
-            SearchOutcome::Unknown => ProofStatus::Unknown,
-            SearchOutcome::Cancelled => ProofStatus::Cancelled,
-            SearchOutcome::NotImplemented => ProofStatus::NotImplemented,
-            SearchOutcome::Error => ProofStatus::Error,
-            SearchOutcome::NotProvable => ProofStatus::NotProvable,
+            SearchOutcome::Provable => ProofResult {
+                status: ProofStatus::Provable,
+                unknown_reason: None,
+            },
+            SearchOutcome::Timeout => ProofResult {
+                status: ProofStatus::Timeout,
+                unknown_reason: None,
+            },
+            SearchOutcome::Unknown(reason) => ProofResult {
+                status: ProofStatus::Unknown,
+                unknown_reason: Some(reason),
+            },
+            SearchOutcome::Cancelled => ProofResult {
+                status: ProofStatus::Cancelled,
+                unknown_reason: None,
+            },
+            SearchOutcome::NotImplemented => ProofResult {
+                status: ProofStatus::NotImplemented,
+                unknown_reason: None,
+            },
+            SearchOutcome::Error => ProofResult {
+                status: ProofStatus::Error,
+                unknown_reason: None,
+            },
+            SearchOutcome::NotProvable => ProofResult {
+                status: ProofStatus::NotProvable,
+                unknown_reason: None,
+            },
         }
     }
 
@@ -126,7 +172,7 @@ impl SearchOutcome {
             SearchOutcome::Provable => 5,
             SearchOutcome::Timeout => 4,
             SearchOutcome::Cancelled => 3,
-            SearchOutcome::Unknown => 2,
+            SearchOutcome::Unknown(_) => 2,
             SearchOutcome::NotImplemented => 1,
             SearchOutcome::Error => 1,
             SearchOutcome::NotProvable => 0,
@@ -147,21 +193,19 @@ pub fn prove_with_cancel(
     cancel_requested: &AtomicBool,
 ) -> ProofResult {
     let deadline = Instant::now() + options.timeout;
-    let state = BranchState::new(visible_terms_in_sequent(sequent));
+    let state = BranchState::new();
     let mut steps_taken = 0usize;
 
-    ProofResult {
-        status: backwards_search(
-            sequent,
-            deadline,
-            &state,
-            &options,
-            cancel_requested,
-            0,
-            &mut steps_taken,
-        )
-        .into_status(),
-    }
+    backwards_search(
+        sequent,
+        deadline,
+        &state,
+        &options,
+        cancel_requested,
+        0,
+        &mut steps_taken,
+    )
+    .into_result()
 }
 
 /// Performs backward search from a single sequent until it closes or fails.
@@ -184,15 +228,25 @@ fn backwards_search(
         return SearchOutcome::Timeout;
     }
 
-    if depth > options.max_depth || *steps_taken >= options.max_steps {
-        warn!("Proof search hit an exploration limit.");
-        return SearchOutcome::Unknown;
+    if depth > options.max_depth {
+        warn!("Proof search hit the max depth limit.");
+        return SearchOutcome::Unknown(UnknownReason::MaxDepthExceeded);
+    }
+    if *steps_taken >= options.max_steps {
+        warn!("Proof search hit the max step limit.");
+        return SearchOutcome::Unknown(UnknownReason::MaxStepsExceeded);
     }
     *steps_taken += 1;
 
-    let Some(scheduled_rules) = schedule_next_rules(sequent, state) else {
-        return SearchOutcome::NotProvable;
-    };
+    let scheduled_rules =
+        match schedule_next_rules(sequent, state, options.max_fresh_terms_per_quantifier) {
+            ScheduleResult::Rules(rules) => rules,
+            ScheduleResult::QuantifierExhausted => {
+                warn!("Proof search exhausted the fresh quantifier fallback budget.");
+                return SearchOutcome::Unknown(UnknownReason::QuantifierBudgetExceeded);
+            }
+            ScheduleResult::NoRules => return SearchOutcome::NotProvable,
+        };
 
     let mut best = SearchOutcome::NotProvable;
 

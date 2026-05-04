@@ -1,8 +1,8 @@
 mod cli;
 
 use clap::Parser;
-use env_logger::Target;
 use cli::{CliOptions, Command, run_prover_mode, run_rules_mode};
+use env_logger::Target;
 
 fn main() {
     // init a logger

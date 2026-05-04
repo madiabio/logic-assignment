@@ -1,4 +1,7 @@
-use theorem_prover::{ProblemPipelineError, ProofStatus, run_problem};
+use theorem_prover::{
+    BiconditionalPolicy, ProblemPipelineError, ProofOptions, ProofStatus, RunProblemOptions,
+    UnknownReason, build_problem_sequent, run_problem, run_problem_with_options,
+};
 
 #[test]
 fn run_problem_returns_not_provable_for_atomic_dead_end_problem() {
@@ -116,6 +119,101 @@ fof(conj_1,conjecture,(p => q)).
     .expect("pipeline should succeed");
 
     assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn run_problem_proves_syn968_shape_by_revisiting_exists_right() {
+    let result = run_problem(
+        r#"
+fof(conj_1,conjecture,? [X] : ! [Y] : (p(X) => p(Y))).
+"#,
+    )
+    .expect("pipeline should succeed");
+
+    assert_eq!(result.status, ProofStatus::Provable);
+}
+
+#[test]
+fn run_problem_does_not_refute_open_quantified_theorem_shape() {
+    let result = run_problem(
+        r#"
+fof(conj_1,conjecture,~ ? [Y] : ! [X] : (a(X,Y) <=> ~ a(X,X))).
+"#,
+    )
+    .expect("pipeline should succeed");
+
+    assert_ne!(result.status, ProofStatus::NotProvable);
+}
+
+#[test]
+fn run_problem_returns_unknown_when_biconditional_cap_is_exceeded() {
+    let result = run_problem_with_options(
+        r#"
+p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
+p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
+"#,
+        RunProblemOptions {
+            proof: ProofOptions::default(),
+            biconditional_policy: BiconditionalPolicy {
+                max_biconditionals: Some(12),
+            },
+            ..RunProblemOptions::default()
+        },
+    )
+    .expect("pipeline should return an inconclusive proof result");
+
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(
+        result.unknown_reason,
+        Some(UnknownReason::BiconditionalCapExceeded)
+    );
+}
+
+#[test]
+fn run_problem_returns_unknown_for_unsupported_include() {
+    let result = run_problem(
+        r#"
+include('Axioms/GEO008+0.ax').
+fof(conj_1,conjecture,p).
+"#,
+    )
+    .expect("pipeline should return an inconclusive proof result");
+
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(
+        result.unknown_reason,
+        Some(UnknownReason::UnsupportedInclude)
+    );
+}
+
+#[test]
+fn build_problem_sequent_rejects_unsupported_include() {
+    let err = build_problem_sequent(
+        r#"
+include('Axioms/GEO008+0.ax').
+fof(conj_1,conjecture,p).
+"#,
+    )
+    .expect_err("sequent construction must not ignore include directives");
+
+    assert_eq!(err, ProblemPipelineError::UnsupportedInclude);
+}
+
+#[test]
+fn run_problem_without_biconditional_cap_still_reports_parse_failures() {
+    let err = run_problem_with_options(
+        r#"
+p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
+p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
+"#,
+        RunProblemOptions::default(),
+    )
+    .expect_err("pipeline should parse input when no biconditional cap is configured");
+
+    match err {
+        ProblemPipelineError::Parse(_) => {}
+        other => panic!("expected parse failure, got {other:?}"),
+    }
 }
 
 #[test]

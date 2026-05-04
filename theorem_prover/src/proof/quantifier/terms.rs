@@ -128,7 +128,7 @@ fn collect_visible_atom_terms(atom: &Atom, seen: &mut BTreeSet<String>, terms: &
     }
 }
 
-/// Adds a term once, recursing into function arguments before recording the term itself.
+/// Adds a ground term once, recursing into function arguments before recording the term itself.
 fn collect_visible_term(term: &Term, seen: &mut BTreeSet<String>, terms: &mut Vec<Term>) {
     if matches!(term, Term::Var(_)) {
         return;
@@ -140,8 +140,20 @@ fn collect_visible_term(term: &Term, seen: &mut BTreeSet<String>, terms: &mut Ve
         }
     }
 
+    if contains_variable(term) {
+        return;
+    }
+
     let key = term.to_string();
     if seen.insert(key) {
         terms.push(term.clone());
+    }
+}
+
+fn contains_variable(term: &Term) -> bool {
+    match term {
+        Term::Var(_) => true,
+        Term::Fun { args, .. } => args.iter().any(contains_variable),
+        Term::Const(_) | Term::Number(_) | Term::DistinctObject(_) => false,
     }
 }

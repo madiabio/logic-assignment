@@ -2,7 +2,11 @@ use crate::cli::args::ProveCommand;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use theorem_prover::ProofOptions;
+use theorem_prover::proof::defaults::{
+    DEFAULT_MAX_DEPTH, DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER, DEFAULT_MAX_STEPS,
+    DEFAULT_PROVE_TIMEOUT,
+};
+use theorem_prover::{BiconditionalPolicy, ProofOptions};
 
 /// Persistent defaults used by config-backed CLI runs.
 #[derive(Clone, Debug)]
@@ -12,6 +16,20 @@ pub(crate) struct AppConfig {
     pub(crate) timeout_ms: Option<u64>,
     pub(crate) max_depth: Option<usize>,
     pub(crate) max_steps: Option<usize>,
+    pub(crate) max_fresh_terms_per_quantifier: Option<usize>,
+    pub(crate) max_biconditionals: Option<usize>,
+}
+
+#[derive(Debug)]
+enum ConfigLoadState {
+    Missing,
+    Available(AppConfig),
+    Invalid(String),
+}
+
+#[derive(Debug)]
+pub(crate) enum EnsureConfigError {
+    Aborted,
 }
 
 /// Loads `config.toml` when it is valid, otherwise returns `None`.
@@ -20,8 +38,19 @@ pub(crate) fn load_config_if_present() -> Option<AppConfig> {
 }
 
 /// Returns a usable config, prompting and writing one on first run if needed.
-pub(crate) fn ensure_config() -> AppConfig {
-    load_config().unwrap_or_else(|_| prompt_for_config())
+pub(crate) fn ensure_config() -> Result<AppConfig, EnsureConfigError> {
+    match classify_config_load() {
+        ConfigLoadState::Available(config) => Ok(config),
+        ConfigLoadState::Missing => Ok(prompt_for_config()),
+        ConfigLoadState::Invalid(err) => {
+            println!("config.toml is unusable: {err}");
+            if confirm_repair() {
+                Ok(prompt_for_config())
+            } else {
+                Err(EnsureConfigError::Aborted)
+            }
+        }
+    }
 }
 
 /// Builds prover options using CLI overrides, then config defaults, then
@@ -38,6 +67,9 @@ pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
         if let Some(max_steps) = config.max_steps {
             proof_options.max_steps = max_steps;
         }
+        if let Some(max_fresh_terms_per_quantifier) = config.max_fresh_terms_per_quantifier {
+            proof_options.max_fresh_terms_per_quantifier = max_fresh_terms_per_quantifier;
+        }
     }
 
     if let Some(timeout_ms) = options.timeout_ms {
@@ -49,7 +81,24 @@ pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
     if let Some(max_steps) = options.max_steps {
         proof_options.max_steps = max_steps;
     }
+    if let Some(max_fresh_terms_per_quantifier) = options.max_fresh_terms_per_quantifier {
+        proof_options.max_fresh_terms_per_quantifier = max_fresh_terms_per_quantifier;
+    }
     proof_options
+}
+
+/// Builds the biconditional input policy using CLI overrides, then config defaults.
+pub(crate) fn biconditional_policy_from_cli(
+    max_biconditionals: Option<usize>,
+) -> BiconditionalPolicy {
+    let mut policy = BiconditionalPolicy::default();
+    if let Some(config) = load_config_if_present() {
+        policy.max_biconditionals = config.max_biconditionals;
+    }
+    if let Some(max_biconditionals) = max_biconditionals {
+        policy.max_biconditionals = Some(max_biconditionals);
+    }
+    policy
 }
 
 /// Parses `config.toml` from the current working directory.
@@ -63,6 +112,8 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
     let mut timeout_ms = None;
     let mut max_depth = None;
     let mut max_steps = None;
+    let mut max_fresh_terms_per_quantifier = None;
+    let mut max_biconditionals = None;
 
     for raw_line in config_contents.lines() {
         let line = raw_line.trim();
@@ -100,6 +151,17 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
                         .map_err(|err| format!("invalid max_steps in config.toml: {err}"))?,
                 )
             }
+            "max_fresh_terms_per_quantifier" => {
+                max_fresh_terms_per_quantifier = Some(value.parse::<usize>().map_err(|err| {
+                    format!("invalid max_fresh_terms_per_quantifier in config.toml: {err}")
+                })?)
+            }
+            "max_biconditionals" => {
+                max_biconditionals =
+                    Some(value.parse::<usize>().map_err(|err| {
+                        format!("invalid max_biconditionals in config.toml: {err}")
+                    })?)
+            }
             _ => {}
         }
     }
@@ -111,7 +173,21 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
         timeout_ms,
         max_depth,
         max_steps,
+        max_fresh_terms_per_quantifier,
+        max_biconditionals,
     })
+}
+
+fn classify_config_load() -> ConfigLoadState {
+    let config_path = Path::new("config.toml");
+    if !config_path.exists() {
+        return ConfigLoadState::Missing;
+    }
+
+    match load_config() {
+        Ok(config) => ConfigLoadState::Available(config),
+        Err(err) => ConfigLoadState::Invalid(err),
+    }
 }
 
 /// Prompts for config values and persists them as `config.toml`.
@@ -136,10 +212,26 @@ fn prompt_for_config() -> AppConfig {
                 .parse::<usize>()
                 .expect("max_steps must be an integer"),
         ),
+        max_fresh_terms_per_quantifier: Some(
+            prompt("Default max fresh terms per quantifier")
+                .parse::<usize>()
+                .expect("max_fresh_terms_per_quantifier must be an integer"),
+        ),
+        max_biconditionals: None,
     };
 
     write_config(&config).expect("failed to write config.toml");
     config
+}
+
+fn confirm_repair() -> bool {
+    matches!(
+        prompt("Replace or repair config.toml now? [y/N]")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "y" | "yes"
+    )
 }
 
 /// Prompts for a single config value on stdin/stdout.
@@ -157,17 +249,22 @@ fn prompt(label: &str) -> String {
 /// Writes the config file in the repository-local TOML-like format expected by
 /// the CLI.
 fn write_config(config: &AppConfig) -> Result<(), String> {
-    let default_options = ProofOptions::default();
-    let contents = format!(
-        "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = {}\nmax_depth = {}\nmax_steps = {}\n",
+    let mut contents = format!(
+        "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = {}\nmax_depth = {}\nmax_steps = {}\nmax_fresh_terms_per_quantifier = {}\n",
         config.tptp_root.display(),
         config.default_subset_file.display(),
         config
             .timeout_ms
-            .unwrap_or(default_options.timeout.as_millis() as u64),
-        config.max_depth.unwrap_or(default_options.max_depth),
-        config.max_steps.unwrap_or(default_options.max_steps),
+            .unwrap_or(DEFAULT_PROVE_TIMEOUT.as_millis() as u64),
+        config.max_depth.unwrap_or(DEFAULT_MAX_DEPTH),
+        config.max_steps.unwrap_or(DEFAULT_MAX_STEPS),
+        config
+            .max_fresh_terms_per_quantifier
+            .unwrap_or(DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER),
     );
+    if let Some(max_biconditionals) = config.max_biconditionals {
+        contents.push_str(&format!("max_biconditionals = {max_biconditionals}\n"));
+    }
 
     fs::write("config.toml", contents).map_err(|err| format!("failed to write config.toml: {err}"))
 }
@@ -190,7 +287,7 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir should be created");
         fs::write(
             temp_dir.join("config.toml"),
-            "tptp_root = \"..\\\\TPTP\"\ndefault_subset_file = \"subset.txt\"\ntimeout_ms = 10\nmax_depth = 20\nmax_steps = 30\n",
+            "tptp_root = \"..\\\\TPTP\"\ndefault_subset_file = \"subset.txt\"\ntimeout_ms = 10\nmax_depth = 20\nmax_steps = 30\nmax_fresh_terms_per_quantifier = 2\nmax_biconditionals = 12\n",
         )
         .expect("config should be written");
 
@@ -202,6 +299,8 @@ mod tests {
         assert_eq!(config.timeout_ms, Some(10));
         assert_eq!(config.max_depth, Some(20));
         assert_eq!(config.max_steps, Some(30));
+        assert_eq!(config.max_fresh_terms_per_quantifier, Some(2));
+        assert_eq!(config.max_biconditionals, Some(12));
         assert_eq!(config.default_subset_file.to_string_lossy(), "subset.txt");
     }
 }
