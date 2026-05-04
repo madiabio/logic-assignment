@@ -206,7 +206,43 @@ pub fn prove_with_cancel(
     .into_result()
 }
 
-/// Performs backward search from a single sequent until it closes or fails.
+/// Performs recursive backward proof search from the given sequent.
+///
+/// The search repeatedly asks the scheduler for the next applicable rule(s),
+/// applies each candidate rule, and recursively attempts to prove the generated
+/// premises. A branch succeeds as soon as one rule application closes the sequent
+/// or all of its premises are provable.
+///
+/// Search is bounded by:
+///
+/// - `deadline`, for wall-clock timeout control
+/// - `options.max_depth`, for recursive search depth
+/// - `options.max_steps`, for total rule-application attempts
+/// - `options.max_fresh_terms_per_quantifier`, for quantified-rule fallback terms
+/// - `cancel_requested`, for external cancellation
+///
+/// The returned [`SearchOutcome`] is conservative: if search cannot safely
+/// conclude that the sequent is not provable because a configured limit or
+/// quantifier budget was reached, it returns [`SearchOutcome::Unknown`] with the
+/// relevant [`UnknownReason`] instead of [`SearchOutcome::NotProvable`].
+///
+/// # Parameters
+///
+/// - `sequent`: The current sequent to prove.
+/// - `deadline`: The instant after which search should stop with
+///   [`SearchOutcome::Timeout`].
+/// - `state`: Branch-local search state, including quantifier-instantiation
+///   history.
+/// - `options`: Proof-search limits and configuration.
+/// - `cancel_requested`: Shared cancellation flag checked during search.
+/// - `depth`: Current recursive search depth.
+/// - `steps_taken`: Mutable counter tracking total search steps across the
+///   proof attempt.
+///
+/// # Returns
+///
+/// A [`SearchOutcome`] describing whether the sequent was proved, disproved
+/// within the implemented fragment, stopped by a limit, cancelled, or failed.
 fn backwards_search(
     sequent: &Sequent,
     deadline: Instant,

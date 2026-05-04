@@ -16,7 +16,31 @@ pub(crate) enum ScheduleResult {
     NoRules,
 }
 
-/// A rule application that is ready to run, possibly with a chosen quantifier term.
+/// A scheduled proof rule ready for application during backward search.
+///
+/// This enum represents rule applications after scheduling has resolved any
+/// necessary choices, particularly for quantifier rules that require selecting
+/// an instantiation term.
+///
+/// Variants are split into:
+///
+/// - `Standard`: Rules that can be applied directly from the sequent structure
+///   with no additional choices or state tracking.
+/// - `ForAllL` / `ExistsR`: Quantifier rules that require an explicit term
+///   instantiation and branch-local bookkeeping.
+///
+/// For quantifier variants:
+///
+/// - `rule_match`: The underlying structural match for the rule.
+/// - `term`: The term chosen to instantiate the quantified variable.
+/// - `key`: A unique identifier for the quantified occurrence, used to track
+///   which terms have already been used on this branch.
+/// - `fresh_fallback`: Indicates whether `term` is a fresh fallback (as opposed
+///   to a reused existing term).
+///
+/// This separation allows the scheduler to enforce the quantifier instantiation
+/// policy (reuse existing terms first, then optionally introduce fresh terms)
+/// while keeping rule application logic simple and uniform downstream.
 pub(crate) enum ScheduledRule {
     Standard(RuleMatch),
     ForAllL {
@@ -33,7 +57,37 @@ pub(crate) enum ScheduledRule {
     },
 }
 
-/// Selects the next batch of rules to try for the current sequent and branch state.
+/// Selects the next batch of proof rules to try for a sequent.
+///
+/// Rules are scheduled in priority order:
+///
+/// 1. Closing rules: `Id`, `TopR`, `BottomL`.
+/// 2. Invertible or single-premise rules, including `AndL`, `OrR`,
+///    `ImpliesR`, negation rules, `ForAllR`, and `ExistsL`.
+/// 3. Branching propositional rules: `AndR`, `OrL`, `ImpliesL`.
+/// 4. Reusable quantifier rules: `ForAllL` and `ExistsR`, with candidate
+///    instantiation terms chosen from the current [`BranchState`].
+///
+/// This function returns only the first non-empty priority group. That keeps
+/// search focused and prevents lower-priority rules from being tried while a
+/// higher-priority rule is still available.
+///
+/// If a reusable quantifier rule is applicable but no further instantiations
+/// are allowed by the branch state or fresh-term budget, this returns
+/// [`ScheduleResult::QuantifierExhausted`] instead of [`ScheduleResult::NoRules`].
+///
+/// # Parameters
+///
+/// - `sequent`: The current sequent being searched.
+/// - `state`: Branch-local state used to avoid repeating quantifier
+///   instantiations.
+/// - `max_fresh_terms_per_quantifier`: Maximum number of fresh fallback terms
+///   allowed for each reusable quantifier occurrence.
+///
+/// # Returns
+///
+/// A [`ScheduleResult`] containing the next rules to try, or indicating that no
+/// rules remain or that quantifier exploration was exhausted.
 pub(crate) fn schedule_next_rules(
     sequent: &Sequent,
     state: &BranchState,
