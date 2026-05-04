@@ -37,7 +37,7 @@ pub(crate) enum OutputFormat {
     author,
     version,
     about,
-    long_about = "Theorem prover CLI.\n\nUse `prove` to run proof search with configurable timeout, depth, and step limits.\nUse `rules` to inspect which sequent-calculus rules apply to a problem."
+    long_about = "Theorem prover CLI.\n\nUse `prove` to run proof search with configurable timeout, depth, step, and quantifier-fallback limits.\nUse `rules` to inspect which sequent-calculus rules apply to a problem."
 )]
 pub(crate) struct CliOptions {
     #[command(subcommand)]
@@ -75,6 +75,13 @@ pub(crate) struct ProveCommand {
     /// bound triggers, the output detail reports `max_steps`.
     #[arg(long)]
     pub(crate) max_steps: Option<usize>,
+    /// Maximum fresh fallback terms allowed per quantified occurrence.
+    ///
+    /// This bounds how many fresh witness or instance terms search may invent
+    /// after visible terms have been reused. When this bound triggers, the
+    /// output detail reports `quantifier_budget`.
+    #[arg(long)]
+    pub(crate) max_fresh_terms_per_quantifier: Option<usize>,
     /// Output format.
     #[arg(long, value_enum, default_value_t = OutputFormat::Human)]
     pub(crate) format: OutputFormat,

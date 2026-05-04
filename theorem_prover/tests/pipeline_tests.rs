@@ -1,6 +1,6 @@
 use theorem_prover::{
-    BiconditionalPolicy, ProblemPipelineError, ProofStatus, UnknownReason, run_problem,
-    run_problem_with_options_and_policy,
+    BiconditionalPolicy, ProblemPipelineError, ProofOptions, ProofStatus, RunProblemOptions,
+    UnknownReason, run_problem, run_problem_with_options,
 };
 
 #[test]
@@ -147,14 +147,17 @@ fof(conj_1,conjecture,~ ? [Y] : ! [X] : (a(X,Y) <=> ~ a(X,X))).
 
 #[test]
 fn run_problem_returns_unknown_when_biconditional_cap_is_exceeded() {
-    let result = run_problem_with_options_and_policy(
+    let result = run_problem_with_options(
         r#"
 p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
 p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
 "#,
-        Default::default(),
-        BiconditionalPolicy {
-            max_biconditionals: Some(12),
+        RunProblemOptions {
+            proof: ProofOptions::default(),
+            biconditional_policy: BiconditionalPolicy {
+                max_biconditionals: Some(12),
+            },
+            ..RunProblemOptions::default()
         },
     )
     .expect("pipeline should return an inconclusive proof result");
@@ -168,13 +171,12 @@ p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
 
 #[test]
 fn run_problem_without_biconditional_cap_still_reports_parse_failures() {
-    let err = run_problem_with_options_and_policy(
+    let err = run_problem_with_options(
         r#"
 p_1 <=> p_2 <=> p_3 <=> p_4 <=> p_5 <=> p_6 <=> p_7 <=>
 p_8 <=> p_9 <=> p_10 <=> p_11 <=> p_12 <=> p_13 <=> p_14
 "#,
-        Default::default(),
-        BiconditionalPolicy::default(),
+        RunProblemOptions::default(),
     )
     .expect_err("pipeline should parse input when no biconditional cap is configured");
 

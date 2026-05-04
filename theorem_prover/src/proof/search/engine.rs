@@ -1,9 +1,10 @@
 //! Depth-first backward proof search with timeout and bounded search handling.
 //!
 //! Default prover limits are defined by:
-//! - `DEFAULT_PROVE_TIMEOUT`
-//! - `DEFAULT_MAX_DEPTH`
-//! - `DEFAULT_MAX_STEPS`
+//! - [`crate::proof::defaults::DEFAULT_PROVE_TIMEOUT`]
+//! - [`crate::proof::defaults::DEFAULT_MAX_DEPTH`]
+//! - [`crate::proof::defaults::DEFAULT_MAX_STEPS`]
+//! - [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`]
 //!
 //! CLI usage:
 //! - `cargo run -- prove problem.p`
@@ -25,13 +26,12 @@ use crate::Sequent;
 use crate::proof::apply::{
     RuleApplication, apply_exists_r_with_term, apply_forall_l_with_term, apply_rule,
 };
+use crate::proof::defaults::{
+    DEFAULT_MAX_DEPTH, DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER, DEFAULT_MAX_STEPS,
+    DEFAULT_PROVE_TIMEOUT,
+};
 use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
 use crate::proof::search::scheduler::{ScheduleResult, ScheduledRule, schedule_next_rules};
-
-const DEFAULT_PROVE_TIMEOUT: Duration = Duration::from_secs(50);
-const DEFAULT_MAX_DEPTH: usize = 128;
-const DEFAULT_MAX_STEPS: usize = 50_000;
-const DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER: usize = 1;
 
 /// Explains why a proof attempt ended with [`ProofStatus::Unknown`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,19 +51,22 @@ pub enum UnknownReason {
 pub struct ProofOptions {
     /// Maximum wall-clock time allowed for a single proof attempt.
     ///
-    /// The default comes from `DEFAULT_PROVE_TIMEOUT`.
+    /// The default comes from
+    /// [`crate::proof::defaults::DEFAULT_PROVE_TIMEOUT`].
     pub timeout: Duration,
     /// Maximum recursive branch depth before search returns `Unknown`.
     ///
-    /// The default comes from `DEFAULT_MAX_DEPTH`.
+    /// The default comes from [`crate::proof::defaults::DEFAULT_MAX_DEPTH`].
     pub max_depth: usize,
     /// Maximum search steps before search returns `Unknown`.
     ///
-    /// The default comes from `DEFAULT_MAX_STEPS`.
+    /// The default comes from [`crate::proof::defaults::DEFAULT_MAX_STEPS`].
     pub max_steps: usize,
     /// Maximum fresh fallback terms for one reusable quantified occurrence.
     ///
     /// Exhausting this budget leaves the branch open and returns `Unknown`.
+    /// The default comes from
+    /// [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`].
     pub max_fresh_terms_per_quantifier: usize,
 }
 

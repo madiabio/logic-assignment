@@ -15,8 +15,8 @@ use std::sync::{
 use std::time::Instant;
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
 use theorem_prover::{
-    BiconditionalPolicy, ProblemPipelineError, ProofOptions, ProofStatus, build_problem_sequent,
-    run_problem_verbose_with_options_and_policy_and_cancel,
+    BiconditionalPolicy, ProblemPipelineError, ProofOptions, ProofStatus, RunProblemOptions,
+    build_problem_sequent, run_problem_with_options,
 };
 
 const EXIT_FAILURE: i32 = 1;
@@ -256,6 +256,10 @@ fn prove_settings_comment(
         setting("timeout_ms", proof_options.timeout.as_millis()),
         setting("max_depth", proof_options.max_depth),
         setting("max_steps", proof_options.max_steps),
+        setting(
+            "max_fresh_terms_per_quantifier",
+            proof_options.max_fresh_terms_per_quantifier,
+        ),
         optional_usize_setting(
             "max_biconditionals",
             biconditional_policy.max_biconditionals,
@@ -489,12 +493,14 @@ fn prove_file(
     let problem_id = problem_run.problem_id();
     let (formulae, atoms) = subset_stats_fields(problem_run.subset_stats);
 
-    match run_problem_verbose_with_options_and_policy_and_cancel(
+    match run_problem_with_options(
         &input,
-        options.display.show_sequent,
-        proof_options,
-        biconditional_policy,
-        cancellation.flag(),
+        RunProblemOptions {
+            show_sequent: options.display.show_sequent,
+            proof: proof_options,
+            biconditional_policy,
+            cancel_requested: Some(cancellation.flag()),
+        },
     ) {
         Ok(result) => {
             clear_parse_failure_marker(&problem_run.path);

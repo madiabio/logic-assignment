@@ -65,7 +65,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &config_path,
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 1\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -104,6 +104,10 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     assert!(stdout.contains("timeout_ms=1000"), "stdout was:\n{stdout}");
     assert!(stdout.contains("max_depth=50"), "stdout was:\n{stdout}");
     assert!(stdout.contains("max_steps=50"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("max_fresh_terms_per_quantifier=1"),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]
@@ -130,7 +134,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &dir.join("config.toml"),
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 1\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -191,7 +195,7 @@ LCL662+1.001        FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &dir.join("config.toml"),
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 1\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -238,7 +242,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &dir.join("config.toml"),
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 1\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -291,7 +295,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &dir.join("config.toml"),
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 1\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -349,7 +353,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &dir.join("config.toml"),
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 0\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 0\nmax_fresh_terms_per_quantifier = 1\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -391,7 +395,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &dir.join("config.toml"),
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 0\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 0\nmax_fresh_terms_per_quantifier = 1\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -441,7 +445,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     let stdin = child.stdin.as_mut().expect("stdin should be available");
     write!(
         stdin,
-        "{}\n{}\n1000\n50\n50\n",
+        "{}\n{}\n1000\n50\n50\n1\n",
         tptp_root.display(),
         subset_path.display()
     )
@@ -1019,7 +1023,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
     write_file(
         &dir.join("config.toml"),
         &format!(
-            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_biconditionals = 12\n",
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 1\nmax_biconditionals = 12\n",
             tptp_root.display(),
             subset_path.display()
         ),
@@ -1074,6 +1078,113 @@ fof(conj_1,conjecture,p).
     );
     assert!(stdout.contains("\tUnknown\t"), "stdout was:\n{stdout}");
     assert!(stdout.contains("\tmax_steps"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prove_subcommand_uses_quantifier_budget_from_config() {
+    let dir = make_temp_dir("prove_quantifier_budget_from_config");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(conj_1,conjecture,? [X] : p(X)).
+"#,
+    );
+
+    let subset_path = dir
+        .join("subset_descriptions")
+        .join("quantifier_budget.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 0\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(stdout.contains("unknown"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("quantifier_budget"),
+        "stdout was:\n{stdout}"
+    );
+}
+
+#[test]
+fn prove_subcommand_cli_overrides_quantifier_budget_from_config() {
+    let dir = make_temp_dir("prove_quantifier_budget_override");
+    let tptp_root = dir.join("TPTP-v9.2.1");
+    let problem_path = tptp_root.join("Problems").join("SYN").join("SYN001+1.p");
+    write_file(
+        &problem_path,
+        r#"
+fof(conj_1,conjecture,? [X] : p(X)).
+"#,
+    );
+
+    let subset_path = dir
+        .join("subset_descriptions")
+        .join("quantifier_budget_override.txt");
+    write_file(
+        &subset_path,
+        r#"
+SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0      1
+"#,
+    );
+
+    write_file(
+        &dir.join("config.toml"),
+        &format!(
+            "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = 1000\nmax_depth = 50\nmax_steps = 50\nmax_fresh_terms_per_quantifier = 0\n",
+            tptp_root.display(),
+            subset_path.display()
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .current_dir(&dir)
+        .args(["prove", "--max-fresh-terms-per-quantifier", "1"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(stdout.contains("not_provable"), "stdout was:\n{stdout}");
+}
+
+#[test]
+fn prove_subcommand_help_describes_quantifier_budget_flag() {
+    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
+        .args(["prove", "--help"])
+        .output()
+        .expect("binary should run");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("--max-fresh-terms-per-quantifier"),
+        "stdout was:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Maximum fresh fallback terms allowed per quantified occurrence."),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]
