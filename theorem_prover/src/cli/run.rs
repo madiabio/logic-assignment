@@ -24,7 +24,8 @@
 use crate::cli::args::{OutputFormat, ProveCommand, RulesCommand};
 use crate::cli::cancel::{CancellationState, EXIT_FAILURE};
 use crate::cli::config::{
-    TptpConfigError, biconditional_policy_from_cli, prover_options_from_cli,
+    EnsureConfigError, TptpConfigError, biconditional_policy_from_cli, ensure_config,
+    prover_options_from_cli,
     validate_and_merge_tptp_config,
 };
 use crate::cli::output::{print_prove_preamble, print_rules_preamble};
@@ -189,9 +190,16 @@ fn resolve_tptp_config_or_exit(
     cli_tptp_root: Option<&std::path::PathBuf>,
     cli_subset_file: Option<&std::path::PathBuf>,
 ) -> (std::path::PathBuf, std::path::PathBuf) {
-    let config = crate::cli::config::load_config_if_present();
+    if let (Some(tptp_root), Some(subset_file)) = (cli_tptp_root, cli_subset_file) {
+        return (tptp_root.clone(), subset_file.clone());
+    }
 
-    match validate_and_merge_tptp_config(cli_tptp_root, cli_subset_file, config.as_ref()) {
+    let config = match ensure_config() {
+        Ok(config) => config,
+        Err(EnsureConfigError::Aborted) => std::process::exit(EXIT_FAILURE),
+    };
+
+    match validate_and_merge_tptp_config(cli_tptp_root, cli_subset_file, Some(&config)) {
         Ok((tptp_root, subset_file)) => (tptp_root, subset_file),
         Err(TptpConfigError::MissingTptpRoot) => {
             eprintln!("error: TPTP root directory not found");
