@@ -15,7 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use theorem_prover::{
-    ProblemPipelineError, ProofStatus, RunProblemOptions, run_problem_with_options,
+    ProblemPipelineError, ProofStatus, RunProblemOptions,
 };
 
 /// Result of running the prover on one file.
@@ -182,15 +182,14 @@ pub(crate) fn prove_file(
     current: usize,
     total: usize,
 ) -> ProveFileResult {
-    let input = fs::read_to_string(&problem_run.path).expect("Failed to read input file");
     let proof_options = prover_options_from_cli(options);
     let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
     let started_at = Instant::now();
     let problem_id = problem_run.problem_id();
     let (formulae, atoms) = subset_stats_fields(problem_run.subset_stats);
 
-    match run_problem_with_options(
-        &input,
+    match theorem_prover::run_problem_from_path_with_options(
+        &problem_run.path,
         RunProblemOptions {
             show_sequent: options.display.show_sequent,
             proof: proof_options,
@@ -247,30 +246,26 @@ pub(crate) fn prove_file(
             eprintln!("{err}");
             ProveFileResult::ProcessingFailure
         }
-        Err(ProblemPipelineError::UnsupportedInclude) => {
+        Err(ProblemPipelineError::Include(err)) => {
             clear_parse_failure_marker(&problem_run.path);
-            let elapsed_ms = started_at.elapsed().as_millis();
-            let status = ProofStatus::Unknown;
-            let detail = human_unknown_reason(theorem_prover::UnknownReason::UnsupportedInclude);
-            let human_status = format!("unknown ({detail})");
             match options.format {
                 OutputFormat::Human => print_prove_human_row(
                     current,
                     total,
                     &problem_id,
-                    human_status.as_str(),
-                    elapsed_ms,
+                    "include_failed",
+                    0,
                     problem_run.human_formulae(),
                     problem_run.human_atoms(),
                     &problem_run.path,
                 ),
-                OutputFormat::Tsv => println!(
-                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\t{:?}\t{elapsed_ms}\t{detail}",
-                    problem_run.path.display(),
-                    status
+                OutputFormat::Tsv => eprintln!(
+                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\tinclude_failed\t0",
+                    problem_run.path.display()
                 ),
             }
-            ProveFileResult::Status(status)
+            eprintln!("{err}");
+            ProveFileResult::ProcessingFailure
         }
         Err(ProblemPipelineError::SequentBuild(err)) => {
             match options.format {

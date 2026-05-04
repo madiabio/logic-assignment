@@ -4,8 +4,7 @@ use crate::cli::args::{OutputFormat, RulesCommand};
 use crate::cli::cancel::{CancellationState, EXIT_FAILURE, rules_batch_exit_code};
 use crate::cli::config::biconditional_policy_from_cli;
 use crate::cli::output::{
-    human_unknown_reason, print_rules_human_row, print_rules_preamble, print_summary_header,
-    print_summary_row,
+    print_rules_human_row, print_rules_preamble, print_summary_header, print_summary_row,
 };
 use crate::cli::parse_failure::{
     clear_parse_failure_marker, should_skip_parse_failed_file, write_parse_failure_marker,
@@ -14,7 +13,7 @@ use crate::cli::subset::{ProblemRun, subset_stats_fields};
 use std::fs;
 use std::path::{Path, PathBuf};
 use theorem_prover::proof::rules::{RuleMatch, find_applicable_rules};
-use theorem_prover::{ProblemPipelineError, build_problem_sequent};
+use theorem_prover::{ProblemPipelineError, build_problem_sequent_from_path};
 
 /// Outcome of running rule inspection on one file.
 #[derive(Clone, Copy)]
@@ -180,7 +179,7 @@ pub(crate) fn inspect_rules_file(
         };
     }
 
-    match build_problem_sequent(&input) {
+    match build_problem_sequent_from_path(&problem_run.path) {
         Ok(sequent) => {
             clear_parse_failure_marker(&problem_run.path);
             let matches = find_applicable_rules(&sequent);
@@ -245,32 +244,29 @@ pub(crate) fn inspect_rules_file(
                 skipped_by_policy: false,
             }
         }
-        Err(ProblemPipelineError::UnsupportedInclude) => {
+        Err(ProblemPipelineError::Include(err)) => {
             clear_parse_failure_marker(&problem_run.path);
-            let detail = human_unknown_reason(theorem_prover::UnknownReason::UnsupportedInclude);
             match options.format {
                 OutputFormat::Human => print_rules_human_row(
                     current,
                     total,
                     &problem_id,
-                    true,
+                    false,
                     false,
                     problem_run.human_formulae(),
                     problem_run.human_atoms(),
                     &problem_run.path,
                 ),
-                OutputFormat::Tsv => println!(
-                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\ttrue\tfalse\t{detail}",
+                OutputFormat::Tsv => eprintln!(
+                    "problem\t{current}\t{total}\t{problem_id}\t{}\t{formulae}\t{atoms}\tfalse\tfalse\tinclude_failed",
                     problem_run.path.display()
                 ),
             }
-            if options.format == OutputFormat::Human {
-                println!("  {detail}");
-            }
+            eprintln!("{err}");
             RulesInspectionResult {
-                success: true,
+                success: false,
                 had_rule_match: false,
-                skipped_by_policy: true,
+                skipped_by_policy: false,
             }
         }
         Err(ProblemPipelineError::SequentBuild(err)) => {

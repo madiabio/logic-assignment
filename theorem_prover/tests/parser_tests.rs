@@ -255,6 +255,20 @@ fof(lem_1,lemma,s).
 }
 
 #[test]
+fn preserves_plain_include_directives_in_parsed_problem() {
+    let parsed = parse_problem(
+        r#"
+include('Axioms/GEO008+0.ax').
+fof(conj_1,conjecture,p).
+"#,
+    )
+    .expect("problem should parse");
+
+    assert_eq!(parsed.includes.len(), 1);
+    assert_eq!(parsed.includes[0].path, "Axioms/GEO008+0.ax");
+}
+
+#[test]
 fn rejects_malformed_formula_syntax() {
     let input = "fof(bad,axiom,(p(a)).";
     assert!(parse_tptp(input).is_err());

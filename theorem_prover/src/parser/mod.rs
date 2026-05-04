@@ -16,10 +16,16 @@ pub struct FormulaRecord {
     pub formula: Formula,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncludeDirective {
+    pub path: String,
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ParsedProblem {
     pub premises: Vec<FormulaRecord>,
     pub conjecture: Option<FormulaRecord>,
+    pub includes: Vec<IncludeDirective>,
 }
 
 pub fn parse_tptp(input: &str) -> Result<Pairs<'_, Rule>, pest::error::Error<Rule>> {
@@ -41,14 +47,16 @@ pub fn parse_problem(input: &str) -> Result<ParsedProblem, pest::error::Error<Ru
             }
 
             for input in entry.into_inner() {
-                if input.as_rule() != Rule::annotated_formula {
-                    continue;
-                }
-
-                let record = parse_formula_record(input);
-                match record.role.as_str() {
-                    "conjecture" => parsed.conjecture = Some(record),
-                    "axiom" | "hypothesis" => parsed.premises.push(record),
+                match input.as_rule() {
+                    Rule::annotated_formula => {
+                        let record = parse_formula_record(input);
+                        match record.role.as_str() {
+                            "conjecture" => parsed.conjecture = Some(record),
+                            "axiom" | "hypothesis" => parsed.premises.push(record),
+                            _ => {}
+                        }
+                    }
+                    Rule::include_directive => parsed.includes.push(parse_include_directive(input)),
                     _ => {}
                 }
             }
@@ -74,4 +82,16 @@ fn parse_formula_record(pair: Pair<'_, Rule>) -> FormulaRecord {
         role,
         formula,
     }
+}
+
+fn parse_include_directive(pair: Pair<'_, Rule>) -> IncludeDirective {
+    let path = pair
+        .into_inner()
+        .next()
+        .expect("include directive should contain a quoted path")
+        .as_str()
+        .trim_matches('\'')
+        .to_owned();
+
+    IncludeDirective { path }
 }

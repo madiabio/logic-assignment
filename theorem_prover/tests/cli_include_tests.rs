@@ -14,20 +14,29 @@ fn make_temp_dir(test_name: &str) -> PathBuf {
 }
 
 fn write_problem_file(dir: &Path, name: &str, contents: &str) -> PathBuf {
+    fs::create_dir_all(dir).expect("problem dir should be created");
     let path = dir.join(name);
     fs::write(&path, contents).expect("problem file should be written");
     path
 }
 
 #[test]
-fn prove_subcommand_reports_unknown_for_unsupported_include() {
-    let dir = make_temp_dir("prove_unsupported_include");
+fn prove_subcommand_proves_problem_using_included_axioms() {
+    let dir = make_temp_dir("prove_include_supported");
+    let root = dir.join("TPTP-v9.2.1");
     let problem_path = write_problem_file(
-        &dir,
+        &root.join("Problems").join("GEO"),
         "GEO171+2.p",
         r#"
 include('Axioms/GEO008+0.ax').
 fof(con,conjecture,p).
+"#,
+    );
+    write_problem_file(
+        &root.join("Axioms"),
+        "GEO008+0.ax",
+        r#"
+fof(ax_1,axiom,p).
 "#,
     );
 
@@ -44,12 +53,9 @@ fof(con,conjecture,p).
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success(),
-        "expected unsupported include to be reported as unknown\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "expected included axioms to be loaded and proved\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(
-        stdout.contains("unknown (unsupported_include)"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
     assert!(
         !stdout.contains("not_provable"),
         "include problem must not be refuted as conjecture-only\nstdout:\n{stdout}"
@@ -57,10 +63,11 @@ fof(con,conjecture,p).
 }
 
 #[test]
-fn prove_subcommand_continues_batch_after_unsupported_include() {
-    let dir = make_temp_dir("prove_unsupported_include_batch");
+fn prove_subcommand_continues_batch_after_include_backed_problem() {
+    let dir = make_temp_dir("prove_include_supported_batch");
+    let root = dir.join("TPTP-v9.2.1");
     write_problem_file(
-        &dir,
+        &root.join("Problems").join("GEO"),
         "GEO171+2.p",
         r#"
 include('Axioms/GEO008+0.ax').
@@ -68,7 +75,14 @@ fof(con,conjecture,p).
 "#,
     );
     write_problem_file(
-        &dir,
+        &root.join("Axioms"),
+        "GEO008+0.ax",
+        r#"
+fof(ax_1,axiom,p).
+"#,
+    );
+    write_problem_file(
+        &root.join("Problems").join("SYN"),
         "SYN001+1.p",
         r#"
 fof(ax_1,axiom,p).
@@ -86,25 +100,30 @@ fof(con,conjecture,p).
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success(),
-        "expected unsupported include to be an unknown batch result\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "expected include-backed batch run to succeed\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(
-        stdout.contains("unknown (unsupported_include)"),
-        "stdout was:\n{stdout}"
-    );
+    assert!(!stdout.contains("unsupported_include"), "stdout was:\n{stdout}");
     assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
     assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
 }
 
 #[test]
-fn rules_subcommand_skips_unsupported_include_without_building_sequent() {
-    let dir = make_temp_dir("rules_unsupported_include");
+fn rules_subcommand_inspects_problem_using_included_axioms() {
+    let dir = make_temp_dir("rules_include_supported");
+    let root = dir.join("TPTP-v9.2.1");
     let problem_path = write_problem_file(
-        &dir,
+        &root.join("Problems").join("GEO"),
         "GEO171+2.p",
         r#"
 include('Axioms/GEO008+0.ax').
 fof(con,conjecture,p).
+"#,
+    );
+    write_problem_file(
+        &root.join("Axioms"),
+        "GEO008+0.ax",
+        r#"
+fof(ax_1,axiom,p).
 "#,
     );
 
@@ -121,14 +140,8 @@ fof(con,conjecture,p).
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success(),
-        "expected unsupported include to be skipped by rule inspection\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "expected included axioms to be loaded for rule inspection\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(
-        stdout.contains("unsupported_include"),
-        "stdout was:\n{stdout}"
-    );
-    assert!(
-        !stdout.contains("no applicable rules"),
-        "rules must not inspect a conjecture-only sequent\nstdout:\n{stdout}"
-    );
+    assert!(stdout.contains("yes"), "stdout was:\n{stdout}");
+    assert!(!stdout.contains("unsupported_include"), "stdout was:\n{stdout}");
 }
