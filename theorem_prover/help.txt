@@ -1,0 +1,56 @@
+Run the prover on a file or directory of `.p` problems
+
+Usage: theorem_prover.exe prove [OPTIONS] [TARGET]
+
+Arguments:
+  [TARGET]
+          Input `.p` file or directory of `.p` files to prove
+
+Options:
+      --retry-parse-failed
+          Reprocess files that already have a `.parse_failed` marker
+
+      --max-biconditionals <MAX_BICONDITIONALS>
+          Skip inputs whose non-comment `<=>` count exceeds this limit.
+          
+          The gate runs before parsing so large biconditional chains can be reported as an intentional policy limit rather than consuming proof search resources. `prove` reports `unknown` with a specific reason, and `rules` skips inspection without creating a `.parse_failed` marker.
+
+      --show-sequent
+          Print the constructed sequent before running the selected command
+
+      --timeout-ms <TIMEOUT_MS>
+          Wall-clock timeout in milliseconds
+
+      --max-depth <MAX_DEPTH>
+          Maximum recursive proof-search depth before returning `Unknown`.
+          
+          Use this to cap branch nesting during backward search. When this bound triggers, the output detail reports `max_depth`.
+
+      --max-steps <MAX_STEPS>
+          Maximum proof-search steps before returning `Unknown`.
+          
+          Use this to cap total search work across one proof attempt. When this bound triggers, the output detail reports `max_steps`.
+
+      --max-fresh-terms-per-quantifier <MAX_FRESH_TERMS_PER_QUANTIFIER>
+          Maximum fresh fallback terms allowed per quantified occurrence.
+          
+          This bounds how many fresh witness or instance terms search may invent after visible terms have been reused. When this bound triggers, the output detail reports `quantifier_budget`.
+
+      --format <FORMAT>
+          Output format
+          
+          [default: human]
+          [possible values: human, tsv]
+
+      --tptp-root <PATH>
+          Path to the TPTP-v9.x.x root directory.
+          
+          This overrides the `tptp_root` setting from config.toml. When provided, must be used together with `--subset-file`. If neither is provided, the tool falls back to config.toml. If config.toml is missing or incomplete, the tool will prompt or exit with an error.
+
+      --subset-file <PATH>
+          Path to the subset file describing which TPTP problems to process.
+          
+          This overrides the `default_subset_file` setting from config.toml. When provided, must be used together with `--tptp-root`. If neither is provided, the tool falls back to config.toml. If config.toml is missing or incomplete, the tool will prompt or exit with an error.
+
+  -h, --help
+          Print help (see a summary with '-h')
