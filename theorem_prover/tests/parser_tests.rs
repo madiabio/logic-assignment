@@ -154,6 +154,7 @@ fn rewrites_iff_into_conjunction_of_implications() {
     }
 }
 
+#[test]
 fn maps_true_false_constants_to_formula_variants() {
     let parsed = parse_problem("fof(tf,axiom,($true | $false)).").expect("formula should parse");
 

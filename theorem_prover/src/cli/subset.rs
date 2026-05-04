@@ -23,7 +23,6 @@
 //! the default configuration-based resolution. This is the primary entry point
 //! when `--tptp-root` or `--subset-file` are provided.
 
-use crate::cli::config::AppConfig;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -64,11 +63,6 @@ impl ProblemRun {
 pub(crate) struct SubsetStats {
     pub(crate) formulae: usize,
     pub(crate) atoms: usize,
-}
-
-/// Resolves the configured subset file into concrete TPTP problem paths.
-pub(crate) fn resolve_subset_targets(config: &AppConfig) -> Vec<ProblemRun> {
-    resolve_subset_targets_with_paths(&config.tptp_root, &config.default_subset_file)
 }
 
 /// Resolves a subset file into concrete TPTP problem paths using explicit paths.
