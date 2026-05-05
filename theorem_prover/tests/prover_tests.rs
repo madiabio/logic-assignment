@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use theorem_prover::ast::{Formula, Symbol, Term, Var};
 use theorem_prover::{
-    ProofOptions, ProofResult, ProofStatus, Sequent, UnknownReason, parse_problem, prove,
-    prove_with_cancel,
+    ProofOptions, ProofResult, ProofStatus, SearchEngine, Sequent, UnknownReason, parse_problem,
+    prove, prove_with_cancel,
 };
 
 fn predicate_formula(name: &str) -> Formula {
@@ -50,6 +50,13 @@ fn left_disjunction_timeout_sequent(width: usize) -> Sequent {
 
 fn default_options() -> ProofOptions {
     ProofOptions::default()
+}
+
+fn id_options() -> ProofOptions {
+    ProofOptions {
+        engine: SearchEngine::IterativeDeepening,
+        ..ProofOptions::default()
+    }
 }
 
 #[test]
@@ -651,4 +658,107 @@ fn proves_identity_sequent() {
     let result = prove(&sequent, default_options());
 
     assert_eq!(result.status, ProofStatus::Provable);
+}
+
+// --- Iterative deepening engine tests ---
+
+#[test]
+fn prove_id_returns_provable_for_identity_sequent() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("p")],
+        right: vec![predicate_formula("p")],
+    };
+
+    assert_eq!(prove(&sequent, id_options()).status, ProofStatus::Provable);
+}
+
+#[test]
+fn prove_id_returns_not_provable_for_atomic_dead_end() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("p")],
+        right: vec![predicate_formula("q")],
+    };
+
+    assert_eq!(
+        prove(&sequent, id_options()).status,
+        ProofStatus::NotProvable
+    );
+}
+
+#[test]
+fn prove_id_and_naive_agree_on_provable_problem() {
+    let sequent = Sequent {
+        left: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+        right: vec![predicate_formula("p")],
+    };
+
+    assert_eq!(
+        prove(&sequent, default_options()).status,
+        prove(&sequent, id_options()).status,
+    );
+}
+
+#[test]
+fn prove_id_and_naive_agree_on_not_provable_problem() {
+    let sequent = Sequent {
+        left: vec![Formula::and(vec![
+            predicate_formula("p"),
+            predicate_formula("q"),
+        ])],
+        right: vec![predicate_formula("r")],
+    };
+
+    assert_eq!(
+        prove(&sequent, default_options()).status,
+        prove(&sequent, id_options()).status,
+    );
+}
+
+#[test]
+fn prove_id_returns_max_depth_exceeded_when_depth_zero() {
+    let sequent = Sequent {
+        left: vec![predicate_formula("p")],
+        right: vec![predicate_formula("p")],
+    };
+    let opts = ProofOptions {
+        engine: SearchEngine::IterativeDeepening,
+        max_depth: 0,
+        ..ProofOptions::default()
+    };
+
+    let result = prove(&sequent, opts);
+
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxDepthExceeded));
+}
+
+#[test]
+fn prove_id_returns_max_steps_exceeded_with_tight_budget() {
+    let sequent = left_disjunction_timeout_sequent(4);
+    let opts = ProofOptions {
+        engine: SearchEngine::IterativeDeepening,
+        max_steps: 1,
+        ..ProofOptions::default()
+    };
+
+    let result = prove(&sequent, opts);
+
+    assert_eq!(result.status, ProofStatus::Unknown);
+    assert_eq!(result.unknown_reason, Some(UnknownReason::MaxStepsExceeded));
+}
+
+#[test]
+fn prove_id_returns_cancelled_when_flag_set_before_call() {
+    let cancel = AtomicBool::new(true);
+    let sequent = Sequent {
+        left: vec![predicate_formula("p")],
+        right: vec![predicate_formula("p")],
+    };
+
+    let result = prove_with_cancel(&sequent, id_options(), &cancel);
+
+    assert_eq!(result.status, ProofStatus::Cancelled);
 }

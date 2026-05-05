@@ -32,6 +32,29 @@ pub(crate) enum OutputFormat {
     Tsv,
 }
 
+/// Proof-search strategy selectable via `--engine` or `engine` in `config.toml`.
+///
+/// The two variants map directly to the library's [`theorem_prover::SearchEngine`]:
+/// - `naive`  → [`theorem_prover::SearchEngine::Naive`]
+/// - `id`     → [`theorem_prover::SearchEngine::IterativeDeepening`]
+///
+/// When the flag is absent from both the command line and `config.toml`, the
+/// prover falls back to [`CliSearchEngine::Naive`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum CliSearchEngine {
+    /// Depth-first backward search.
+    ///
+    /// Explores the proof tree using a single depth-limited DFS pass.
+    /// This is the default strategy.
+    Naive,
+    /// Iterative-deepening backward search.
+    ///
+    /// Repeatedly runs depth-limited DFS with depth limits 1, 2, 3, … up to
+    /// the configured `--max-depth`, returning as soon as a proof is found.
+    /// Guarantees that the shallowest proof is always found first.
+    Id,
+}
+
 /// Top-level CLI options for the theorem prover executable.
 #[derive(Parser)]
 #[command(
@@ -102,6 +125,12 @@ pub(crate) struct ProveCommand {
     /// missing or incomplete, the tool will prompt or exit with an error.
     #[arg(long, value_name = "PATH")]
     pub(crate) subset_file: Option<PathBuf>,
+    /// Proof-search strategy: `naive` for depth-first, `id` for iterative deepening.
+    ///
+    /// When omitted, falls back to the `engine` key in `config.toml`, or `naive`
+    /// if that is also absent.
+    #[arg(long = "engine", value_enum)]
+    pub(crate) engine: Option<CliSearchEngine>,
     /// Input `.p` file or directory of `.p` files to prove.
     pub(crate) target: Option<String>,
 }

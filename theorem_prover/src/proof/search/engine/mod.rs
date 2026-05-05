@@ -1,21 +1,29 @@
-//! Depth-first backward proof search with timeout and bounded search handling.
+//! Backward proof search dispatcher and shared infrastructure.
 //!
-//! Default prover limits are defined by:
+//! This module owns the public prover API ([`prove`], [`prove_with_cancel`]),
+//! the shared [`backwards_search`] kernel used by both strategies, and the
+//! types that cross module boundaries ([`ProofOptions`], [`ProofResult`],
+//! [`SearchEngine`], [`UnknownReason`]).
+//!
+//! Concrete search strategies live in the submodules:
+//! - [`naive`] — single-pass depth-first backward search
+//! - [`iterative_deepening`] — repeated DFS with increasing depth limits
+//!
+//! Default prover limits:
 //! - [`crate::proof::defaults::DEFAULT_PROVE_TIMEOUT`]
 //! - [`crate::proof::defaults::DEFAULT_MAX_DEPTH`]
 //! - [`crate::proof::defaults::DEFAULT_MAX_STEPS`]
 //! - [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`]
 //!
 //! CLI usage:
-//! - `cargo run -- prove problem.p`
-//! - `cargo run -- prove --timeout-ms 1000 problem.p`
-//! - `cargo run -- prove --max-depth 64 problem.p`
-//! - `cargo run -- prove --max-steps 10000 problem.p`
-//! - `cargo run -- prove --timeout-ms 1000 --max-depth 64 --max-steps 10000 problem.p`
-//!
-//! Rule inspection uses the separate `rules` subcommand:
-//! - `cargo run -- rules problem.p`
-//! - `cargo run -- rules --show-sequent problem.p`
+//! ```text
+//! cargo run -- prove problem.p
+//! cargo run -- prove --timeout-ms 1000 problem.p
+//! cargo run -- prove --max-depth 64 problem.p
+//! cargo run -- prove --max-steps 10000 problem.p
+//! cargo run -- prove --engine naive problem.p   # default
+//! cargo run -- prove --engine id     problem.p   # iterative deepening
+//! ```
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -32,6 +40,20 @@ use crate::proof::defaults::{
 };
 use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
 use crate::proof::search::scheduler::{ScheduleResult, ScheduledRule, schedule_next_rules};
+
+mod naive;
+mod iterative_deepening;
+
+/// Selects the backward-search strategy used by [`prove_with_cancel`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchEngine {
+    /// Depth-first backward search (the original strategy).
+    Naive,
+    /// Iterative-deepening backward search: repeats depth-first search with
+    /// increasing depth limits until the proof is found or the global limit is
+    /// reached.
+    IterativeDeepening,
+}
 
 /// Explains why a proof attempt ended with [`ProofStatus::Unknown`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +90,10 @@ pub struct ProofOptions {
     /// The default comes from
     /// [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`].
     pub max_fresh_terms_per_quantifier: usize,
+    /// Proof-search strategy to use.
+    ///
+    /// The default is [`SearchEngine::Naive`].
+    pub engine: SearchEngine,
 }
 
 impl Default for ProofOptions {
@@ -77,6 +103,7 @@ impl Default for ProofOptions {
             max_depth: DEFAULT_MAX_DEPTH,
             max_steps: DEFAULT_MAX_STEPS,
             max_fresh_terms_per_quantifier: DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER,
+            engine: SearchEngine::Naive,
         }
     }
 }
@@ -110,7 +137,7 @@ pub struct ProofResult {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Internal search outcome used while combining branch results.
-enum SearchOutcome {
+pub(super) enum SearchOutcome {
     Provable,
     NotProvable,
     Timeout,
@@ -137,7 +164,7 @@ impl SearchOutcome {
     /// # Returns
     ///
     /// A [`ProofResult`] suitable for external reporting.
-    fn into_result(self) -> ProofResult {
+    pub(super) fn into_result(self) -> ProofResult {
         match self {
             SearchOutcome::Provable => ProofResult {
                 status: ProofStatus::Provable,
@@ -173,7 +200,7 @@ impl SearchOutcome {
     /// Combines two search outcomes, keeping the more informative one.
     ///
     /// This is used when exploring multiple branches: if none succeed,
-    /// the search returns the “best” failure signal observed.
+    /// the search returns the "best" failure signal observed.
     ///
     /// The ordering is defined by [`priority`], preferring outcomes that
     /// convey stronger or more useful information (e.g. `Timeout` over
@@ -187,7 +214,7 @@ impl SearchOutcome {
     /// # Returns
     ///
     /// The outcome with higher priority.
-    fn merge(self, other: Self) -> Self {
+    pub(super) fn merge(self, other: Self) -> Self {
         if self.priority() >= other.priority() {
             self
         } else {
@@ -240,18 +267,12 @@ pub fn prove_with_cancel(
     cancel_requested: &AtomicBool,
 ) -> ProofResult {
     let deadline = Instant::now() + options.timeout;
-    let state = BranchState::new();
-    let mut steps_taken = 0usize;
-
-    backwards_search(
-        sequent,
-        deadline,
-        &state,
-        &options,
-        cancel_requested,
-        0,
-        &mut steps_taken,
-    )
+    match options.engine {
+        SearchEngine::Naive => naive::run(sequent, deadline, &options, cancel_requested),
+        SearchEngine::IterativeDeepening => {
+            iterative_deepening::run(sequent, deadline, &options, cancel_requested)
+        }
+    }
     .into_result()
 }
 
@@ -292,7 +313,7 @@ pub fn prove_with_cancel(
 ///
 /// A [`SearchOutcome`] describing whether the sequent was proved, disproved
 /// within the implemented fragment, stopped by a limit, cancelled, or failed.
-fn backwards_search(
+pub(super) fn backwards_search(
     sequent: &Sequent,
     deadline: Instant,
     state: &BranchState,

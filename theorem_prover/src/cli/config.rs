@@ -23,7 +23,7 @@
 //! missing from all sources, the command will fail with an error message indicating which
 //! setting is missing and how to provide it.
 
-use crate::cli::args::ProveCommand;
+use crate::cli::args::{CliSearchEngine, ProveCommand};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -31,7 +31,7 @@ use theorem_prover::proof::defaults::{
     DEFAULT_MAX_DEPTH, DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER, DEFAULT_MAX_STEPS,
     DEFAULT_PROVE_TIMEOUT,
 };
-use theorem_prover::{BiconditionalPolicy, ProofOptions};
+use theorem_prover::{BiconditionalPolicy, ProofOptions, SearchEngine};
 
 /// Persistent defaults used by config-backed CLI runs.
 #[derive(Clone, Debug)]
@@ -43,6 +43,8 @@ pub(crate) struct AppConfig {
     pub(crate) max_steps: Option<usize>,
     pub(crate) max_fresh_terms_per_quantifier: Option<usize>,
     pub(crate) max_biconditionals: Option<usize>,
+    /// Proof-search engine. `None` means the library default (`naive`) applies.
+    pub(crate) engine: Option<CliSearchEngine>,
 }
 
 #[derive(Debug)]
@@ -118,8 +120,8 @@ pub(crate) fn validate_and_merge_tptp_config(
     Ok((tptp_root, subset_file))
 }
 
-/// Builds prover options using CLI overrides, then config defaults, then
-/// library defaults.
+/// Builds prover options by merging library defaults, `config.toml` settings,
+/// and CLI flags in that order (CLI flags take highest precedence).
 pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
     let mut proof_options = ProofOptions::default();
     if let Some(config) = load_config_if_present() {
@@ -135,6 +137,9 @@ pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
         if let Some(max_fresh_terms_per_quantifier) = config.max_fresh_terms_per_quantifier {
             proof_options.max_fresh_terms_per_quantifier = max_fresh_terms_per_quantifier;
         }
+        if let Some(engine) = config.engine {
+            proof_options.engine = cli_engine_to_search_engine(engine);
+        }
     }
 
     if let Some(timeout_ms) = options.timeout_ms {
@@ -149,7 +154,17 @@ pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
     if let Some(max_fresh_terms_per_quantifier) = options.max_fresh_terms_per_quantifier {
         proof_options.max_fresh_terms_per_quantifier = max_fresh_terms_per_quantifier;
     }
+    if let Some(engine) = options.engine {
+        proof_options.engine = cli_engine_to_search_engine(engine);
+    }
     proof_options
+}
+
+fn cli_engine_to_search_engine(engine: CliSearchEngine) -> SearchEngine {
+    match engine {
+        CliSearchEngine::Naive => SearchEngine::Naive,
+        CliSearchEngine::Id => SearchEngine::IterativeDeepening,
+    }
 }
 
 /// Builds the biconditional input policy using CLI overrides, then config defaults.
@@ -179,6 +194,7 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
     let mut max_steps = None;
     let mut max_fresh_terms_per_quantifier = None;
     let mut max_biconditionals = None;
+    let mut engine: Option<CliSearchEngine> = None;
 
     for raw_line in config_contents.lines() {
         let line = raw_line.trim();
@@ -227,6 +243,17 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
                         format!("invalid max_biconditionals in config.toml: {err}")
                     })?)
             }
+            "engine" => {
+                engine = Some(match value {
+                    "naive" => CliSearchEngine::Naive,
+                    "id" => CliSearchEngine::Id,
+                    other => {
+                        return Err(format!(
+                            "invalid engine in config.toml: '{other}', expected 'naive' or 'id'"
+                        ))
+                    }
+                });
+            }
             _ => {}
         }
     }
@@ -240,6 +267,7 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
         max_steps,
         max_fresh_terms_per_quantifier,
         max_biconditionals,
+        engine,
     })
 }
 
@@ -283,6 +311,7 @@ fn prompt_for_config() -> AppConfig {
                 .expect("max_fresh_terms_per_quantifier must be an integer"),
         ),
         max_biconditionals: None,
+        engine: None,
     };
 
     write_config(&config).expect("failed to write config.toml");
@@ -330,6 +359,13 @@ fn write_config(config: &AppConfig) -> Result<(), String> {
     if let Some(max_biconditionals) = config.max_biconditionals {
         contents.push_str(&format!("max_biconditionals = {max_biconditionals}\n"));
     }
+    if let Some(engine) = config.engine {
+        let engine_str = match engine {
+            CliSearchEngine::Naive => "naive",
+            CliSearchEngine::Id => "id",
+        };
+        contents.push_str(&format!("engine = \"{engine_str}\"\n"));
+    }
 
     fs::write("config.toml", contents).map_err(|err| format!("failed to write config.toml: {err}"))
 }
@@ -337,6 +373,7 @@ fn write_config(config: &AppConfig) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{load_config, validate_and_merge_tptp_config, AppConfig, TptpConfigError};
+    use crate::cli::args::CliSearchEngine;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -353,7 +390,7 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir should be created");
         fs::write(
             temp_dir.join("config.toml"),
-            "tptp_root = \"..\\\\TPTP\"\ndefault_subset_file = \"subset.txt\"\ntimeout_ms = 10\nmax_depth = 20\nmax_steps = 30\nmax_fresh_terms_per_quantifier = 2\nmax_biconditionals = 12\n",
+            "tptp_root = \"..\\\\TPTP\"\ndefault_subset_file = \"subset.txt\"\ntimeout_ms = 10\nmax_depth = 20\nmax_steps = 30\nmax_fresh_terms_per_quantifier = 2\nmax_biconditionals = 12\nengine = \"id\"\n",
         )
         .expect("config should be written");
 
@@ -367,7 +404,36 @@ mod tests {
         assert_eq!(config.max_steps, Some(30));
         assert_eq!(config.max_fresh_terms_per_quantifier, Some(2));
         assert_eq!(config.max_biconditionals, Some(12));
+        assert_eq!(config.engine, Some(CliSearchEngine::Id));
         assert_eq!(config.default_subset_file.to_string_lossy(), "subset.txt");
+    }
+
+    #[test]
+    fn load_config_returns_error_for_invalid_engine_value() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "theorem_prover_config_engine_err_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be valid")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        fs::write(
+            temp_dir.join("config.toml"),
+            "tptp_root = \".\"\ndefault_subset_file = \"subset.txt\"\nengine = \"bogus\"\n",
+        )
+        .expect("config should be written");
+
+        let original_dir = std::env::current_dir().expect("cwd should exist");
+        std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
+        let result = load_config();
+        std::env::set_current_dir(original_dir).expect("cwd should be restored");
+
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("bogus"),
+            "error message should mention the invalid value"
+        );
     }
 
     #[test]
@@ -382,6 +448,7 @@ mod tests {
             max_steps: None,
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
+            engine: None,
         };
 
         let result = validate_and_merge_tptp_config(
@@ -406,6 +473,7 @@ mod tests {
             max_steps: None,
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
+            engine: None,
         };
 
         let result = validate_and_merge_tptp_config(None, None, Some(&config));
@@ -440,6 +508,7 @@ mod tests {
             max_steps: None,
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
+            engine: None,
         };
 
         let result = validate_and_merge_tptp_config(Some(&cli_tptp_root), None, Some(&config));
