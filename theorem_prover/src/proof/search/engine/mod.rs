@@ -39,7 +39,9 @@ use crate::proof::defaults::{
     DEFAULT_PROVE_TIMEOUT,
 };
 use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
-use crate::proof::search::scheduler::{ScheduleResult, ScheduledRule, schedule_next_rules};
+use crate::proof::search::scheduler::{
+    ScheduleResult, ScheduledRule, schedule_next_rules, schedule_next_rules_lk_priority,
+};
 
 mod naive;
 mod iterative_deepening;
@@ -53,6 +55,10 @@ pub enum SearchEngine {
     /// increasing depth limits until the proof is found or the global limit is
     /// reached.
     IterativeDeepening,
+    /// Depth-first backward search with the LK′ 6-class priority scheduler.
+    Priority,
+    /// Iterative-deepening backward search with the LK′ 6-class priority scheduler.
+    PriorityId,
 }
 
 /// Explains why a proof attempt ended with [`ProofStatus::Unknown`].
@@ -302,8 +308,10 @@ pub fn prove_with_cancel(
 ) -> ProofResult {
     let deadline = Instant::now() + options.timeout;
     match options.engine {
-        SearchEngine::Naive => naive::run(sequent, deadline, &options, cancel_requested),
-        SearchEngine::IterativeDeepening => {
+        SearchEngine::Naive | SearchEngine::Priority => {
+            naive::run(sequent, deadline, &options, cancel_requested)
+        }
+        SearchEngine::IterativeDeepening | SearchEngine::PriorityId => {
             iterative_deepening::run(sequent, deadline, &options, cancel_requested)
         }
     }
@@ -376,15 +384,21 @@ pub(super) fn backwards_search(
     }
     *steps_taken += 1;
 
-    let scheduled_rules =
-        match schedule_next_rules(sequent, state, options.max_fresh_terms_per_quantifier) {
-            ScheduleResult::Rules(rules) => rules,
-            ScheduleResult::QuantifierExhausted => {
-                warn!("Proof search exhausted the fresh quantifier fallback budget.");
-                return SearchOutcome::Unknown(UnknownReason::QuantifierBudgetExceeded);
-            }
-            ScheduleResult::NoRules => return SearchOutcome::NotProvable,
-        };
+    let scheduled_rules = match match options.engine {
+        SearchEngine::Naive | SearchEngine::IterativeDeepening => {
+            schedule_next_rules(sequent, state, options.max_fresh_terms_per_quantifier)
+        }
+        SearchEngine::Priority | SearchEngine::PriorityId => {
+            schedule_next_rules_lk_priority(sequent, state, options.max_fresh_terms_per_quantifier)
+        }
+    } {
+        ScheduleResult::Rules(rules) => rules,
+        ScheduleResult::QuantifierExhausted => {
+            warn!("Proof search exhausted the fresh quantifier fallback budget.");
+            return SearchOutcome::Unknown(UnknownReason::QuantifierBudgetExceeded);
+        }
+        ScheduleResult::NoRules => return SearchOutcome::NotProvable,
+    };
 
     let mut best = SearchOutcome::NotProvable;
 
