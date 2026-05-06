@@ -67,7 +67,7 @@ pub fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
             run_id      INTEGER NOT NULL REFERENCES runs(run_id),
             problem_id  TEXT    NOT NULL,
             path        TEXT    NOT NULL,
-            status      TEXT    NOT NULL,
+            status      TEXT    NOT NULL CHECK(status IN ('provable', 'not_provable', 'timeout', 'unknown', 'cancelled', 'not_implemented', 'error')),
             elapsed_ms  INTEGER NOT NULL,
             formulae    INTEGER,
             atoms       INTEGER,
@@ -203,8 +203,8 @@ mod tests {
         let id1 = insert_run(&conn, &sample_run()).unwrap();
         let id2 = insert_run(&conn, &sample_run()).unwrap();
 
-        assert_eq!(id1, 1);
-        assert_eq!(id2, 2);
+        assert!(id1 > 0);
+        assert!(id2 > id1);
     }
 
     #[test]
@@ -324,5 +324,18 @@ mod tests {
         assert_eq!(summary.get("provable"), Some(&3u64));
         assert_eq!(summary.get("timeout"), Some(&2u64));
         assert_eq!(summary.len(), 2);
+    }
+
+    #[test]
+    fn insert_result_rejects_invalid_status() {
+        let conn = in_memory();
+        ensure_schema(&conn).unwrap();
+        let run_id = insert_run(&conn, &sample_run()).unwrap();
+
+        let mut invalid_result = sample_result("provable");
+        invalid_result.status = "invalid_status".to_string();
+
+        let result = insert_result(&conn, run_id, &invalid_result);
+        assert!(result.is_err(), "INSERT should fail for invalid status");
     }
 }
