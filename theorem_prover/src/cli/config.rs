@@ -4,24 +4,35 @@
 //!
 //! ## Configuration Sources
 //!
-//! The CLI accepts configuration from multiple sources with the following precedence:
+//! The CLI accepts configuration from multiple sources with the following precedence
+//! (highest wins):
 //!
-//! 1. **CLI flags** (highest priority)
-//!    - `--tptp-root <PATH>` - Override TPTP root directory
-//!    - `--subset-file <PATH>` - Override subset file path
+//! 1. **CLI flags**
+//!    - `--tptp-root <PATH>`
+//!    - `--subset-file <PATH>`
+//!    - `--timeout-ms <MS>`
+//!    - `--max-depth <N>`
+//!    - `--max-steps <N>`
+//!    - `--max-fresh-terms-per-quantifier <N>`
+//!    - `--engine naive|id`
 //!
-//! 2. **config.toml** (medium priority)
-//!    - `tptp_root` - Path to TPTP-v9.x.x root directory
-//!    - `default_subset_file` - Path to default subset file
+//! 2. **`config.toml`** (keys accepted)
+//!    - `tptp_root` — path to TPTP-v9.x.x root directory *(required)*
+//!    - `default_subset_file` — path to default subset file *(required)*
+//!    - `timeout_ms` — wall-clock timeout in milliseconds
+//!    - `max_depth` — maximum recursive proof-search depth
+//!    - `max_steps` — maximum proof-search steps
+//!    - `max_fresh_terms_per_quantifier` — fresh fallback terms per quantifier occurrence
+//!    - `max_biconditionals` — biconditional gate before parsing
+//!    - `engine` — proof-search strategy: `"naive"` or `"id"`
 //!
-//! 3. **Interactive prompts** (if config.toml is missing)
-//!    - Prompts user to provide configuration values on first run
+//! 3. **Interactive prompts** (if `config.toml` is missing)
+//!    — prompts for the required fields on first run
 //!
 //! ## Configuration Requirements
 //!
-//! The system requires both a TPTP root directory and a subset file to run. If either is
-//! missing from all sources, the command will fail with an error message indicating which
-//! setting is missing and how to provide it.
+//! `tptp_root` and `default_subset_file` must be present in either the CLI flags or
+//! `config.toml`. All other keys are optional and fall back to library defaults when absent.
 
 use crate::cli::args::{CliSearchEngine, ProveCommand};
 use std::fs;

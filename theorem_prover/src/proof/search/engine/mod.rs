@@ -255,12 +255,46 @@ impl SearchOutcome {
 }
 
 /// Attempts to prove a sequent within the configured timeout and search bounds.
+///
+/// Equivalent to [`prove_with_cancel`] with a cancellation flag that is never
+/// set.  Use this when there is no external signal that should interrupt search.
+///
+/// The search strategy is selected by [`ProofOptions::engine`].
+///
+/// # Parameters
+///
+/// - `sequent`: The goal sequent to prove.
+/// - `options`: Proof-search limits and strategy configuration.
+///
+/// # Returns
+///
+/// A [`ProofResult`] describing the outcome.
 pub fn prove(sequent: &Sequent, options: ProofOptions) -> ProofResult {
     static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
     prove_with_cancel(sequent, options, &NEVER_CANCELLED)
 }
 
 /// Attempts to prove a sequent while observing an external cancellation flag.
+///
+/// Dispatches to the search strategy specified by [`ProofOptions::engine`]:
+///
+/// - [`SearchEngine::Naive`] → [`naive`] (single-pass depth-first search)
+/// - [`SearchEngine::IterativeDeepening`] → [`iterative_deepening`] (repeated
+///   DFS with depth limits 1, 2, … up to [`ProofOptions::max_depth`])
+///
+/// Search stops as soon as `cancel_requested` is observed as `true`, the
+/// wall-clock deadline is reached, or the strategy returns a definitive result.
+///
+/// # Parameters
+///
+/// - `sequent`: The goal sequent to prove.
+/// - `options`: Proof-search limits and strategy configuration.
+/// - `cancel_requested`: An [`AtomicBool`] that, when set to `true`, causes
+///   search to stop and return [`ProofStatus::Cancelled`].
+///
+/// # Returns
+///
+/// A [`ProofResult`] describing the outcome.
 pub fn prove_with_cancel(
     sequent: &Sequent,
     options: ProofOptions,
