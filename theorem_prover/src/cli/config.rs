@@ -34,7 +34,7 @@
 //! `tptp_root` and `default_subset_file` must be present in either the CLI flags or
 //! `config.toml`. All other keys are optional and fall back to library defaults when absent.
 
-use crate::cli::args::{CliSearchEngine, ProveCommand};
+use crate::cli::args::{CliSearchEngine, PersistOpt, ProveCommand};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -56,6 +56,9 @@ pub(crate) struct AppConfig {
     pub(crate) max_biconditionals: Option<usize>,
     /// Proof-search engine. `None` means the library default (`naive`) applies.
     pub(crate) engine: Option<CliSearchEngine>,
+    /// Path to the SQLite database file for persisting proof results.
+    #[allow(dead_code)]
+    pub(crate) results_db: Option<String>,
 }
 
 #[derive(Debug)]
@@ -129,6 +132,21 @@ pub(crate) fn validate_and_merge_tptp_config(
         .ok_or(TptpConfigError::MissingSubsetFile)?;
 
     Ok((tptp_root, subset_file))
+}
+
+/// Resolves the effective persistence path for a run, considering CLI override and config.
+///
+/// Returns `None` if persistence is disabled or not configured.
+#[allow(dead_code)]
+pub(crate) fn resolve_persist_path(
+    cli_persist: Option<&PersistOpt>,
+    config: &AppConfig,
+) -> Option<PathBuf> {
+    match cli_persist {
+        Some(PersistOpt::Disabled) => None,
+        Some(PersistOpt::Path(p)) => Some(PathBuf::from(p)),
+        None => config.results_db.as_ref().map(|p| PathBuf::from(p)),
+    }
 }
 
 /// Builds prover options by merging library defaults, `config.toml` settings,
@@ -206,6 +224,7 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
     let mut max_fresh_terms_per_quantifier = None;
     let mut max_biconditionals = None;
     let mut engine: Option<CliSearchEngine> = None;
+    let mut results_db = None;
 
     for raw_line in config_contents.lines() {
         let line = raw_line.trim();
@@ -265,6 +284,9 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
                     }
                 });
             }
+            "results_db" => {
+                results_db = Some(value.to_string());
+            }
             _ => {}
         }
     }
@@ -279,6 +301,7 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
         max_fresh_terms_per_quantifier,
         max_biconditionals,
         engine,
+        results_db,
     })
 }
 
@@ -323,6 +346,7 @@ fn prompt_for_config() -> AppConfig {
         ),
         max_biconditionals: None,
         engine: None,
+        results_db: None,
     };
 
     write_config(&config).expect("failed to write config.toml");
@@ -460,6 +484,7 @@ mod tests {
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
             engine: None,
+            results_db: None,
         };
 
         let result = validate_and_merge_tptp_config(
@@ -485,6 +510,7 @@ mod tests {
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
             engine: None,
+            results_db: None,
         };
 
         let result = validate_and_merge_tptp_config(None, None, Some(&config));
@@ -520,6 +546,7 @@ mod tests {
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
             engine: None,
+            results_db: None,
         };
 
         let result = validate_and_merge_tptp_config(Some(&cli_tptp_root), None, Some(&config));
@@ -530,3 +557,7 @@ mod tests {
         assert_eq!(resolved_file, config.default_subset_file);
     }
 }
+
+#[cfg(test)]
+#[path = "config_persist_tests.rs"]
+mod config_persist_tests;

@@ -1,5 +1,5 @@
 use clap::Parser;
-use crate::cli::args::{CliOptions, Command, ProveCommand};
+use crate::cli::args::{CliOptions, Command, ProveCommand, PersistOpt};
 
 /// Helper to parse a `prove` subcommand from argument list.
 fn parse_prove(args: &[&str]) -> ProveCommand {
@@ -14,13 +14,13 @@ fn parse_prove(args: &[&str]) -> ProveCommand {
 #[test]
 fn persist_false_parses_correctly() {
     let prove = parse_prove(&["prove", "--persist", "false"]);
-    assert_eq!(prove.persist, Some("false".to_string()));
+    assert!(matches!(prove.persist, Some(PersistOpt::Disabled)));
 }
 
 #[test]
 fn persist_path_parses_correctly() {
     let prove = parse_prove(&["prove", "--persist", "./results.db"]);
-    assert_eq!(prove.persist, Some("./results.db".to_string()));
+    assert!(matches!(prove.persist, Some(PersistOpt::Path(p)) if p == "./results.db"));
 }
 
 #[test]
