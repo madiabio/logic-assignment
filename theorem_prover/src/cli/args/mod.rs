@@ -131,6 +131,12 @@ pub(crate) struct ProveCommand {
     /// if that is also absent.
     #[arg(long = "engine", value_enum)]
     pub(crate) engine: Option<CliSearchEngine>,
+    /// SQLite DB path to persist results, or "false" to disable. Defaults to config.toml value.
+    #[arg(long, value_name = "PATH|false")]
+    pub(crate) persist: Option<String>,
+    /// Human-readable label for this run stored in the DB.
+    #[arg(long, value_name = "LABEL")]
+    pub(crate) run_label: Option<String>,
     /// Input `.p` file or directory of `.p` files to prove.
     pub(crate) target: Option<String>,
 }
@@ -181,3 +187,6 @@ impl ParseFailureOptions for RulesCommand {
         self.run.retry_parse_failed
     }
 }
+
+#[cfg(test)]
+mod args_persist_tests;
