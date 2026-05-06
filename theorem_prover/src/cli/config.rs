@@ -26,6 +26,7 @@
 //!    - `max_biconditionals` — biconditional gate before parsing
 //!    - `engine` — proof-search strategy: `"naive"` or `"id"`
 //!    - `results_db` — path to SQLite database for persisting proof results
+//!      (`..\results.db` is used when this field is omitted)
 //!
 //! 3. **Interactive prompts** (if `config.toml` is missing)
 //!    — prompts for the required fields on first run
@@ -45,6 +46,8 @@ use theorem_prover::proof::defaults::{
 };
 use theorem_prover::{BiconditionalPolicy, ProofOptions, SearchEngine};
 
+const DEFAULT_RESULTS_DB: &str = r"..\results.db";
+
 /// Persistent defaults used by config-backed CLI runs.
 #[derive(Clone, Debug)]
 pub(crate) struct AppConfig {
@@ -58,6 +61,9 @@ pub(crate) struct AppConfig {
     /// Proof-search engine. `None` means the library default (`naive`) applies.
     pub(crate) engine: Option<CliSearchEngine>,
     /// Path to the SQLite database file for persisting proof results.
+    ///
+    /// When this field is omitted, the runtime falls back to
+    /// [`default_results_db_path()`].
     pub(crate) results_db: Option<String>,
 }
 
@@ -103,6 +109,11 @@ pub(crate) fn ensure_config() -> Result<AppConfig, EnsureConfigError> {
     }
 }
 
+/// Returns the built-in SQLite database path used when no config override is present.
+pub(crate) fn default_results_db_path() -> PathBuf {
+    PathBuf::from(DEFAULT_RESULTS_DB)
+}
+
 /// Validates and merges TPTP configuration from CLI arguments and config.toml.
 ///
 /// Precedence:
@@ -136,16 +147,19 @@ pub(crate) fn validate_and_merge_tptp_config(
 
 /// Resolves the effective persistence path for a run, considering CLI override and config.
 ///
-/// Returns `None` if persistence is disabled or not configured.
-#[allow(dead_code)]
+/// Persistence is enabled by default. `false` disables it, an explicit path
+/// overrides everything, and the fallback path is either `config.toml`'s
+/// `results_db` value or the built-in `..\results.db`.
 pub(crate) fn resolve_persist_path(
     cli_persist: Option<&PersistOpt>,
-    config: &AppConfig,
+    config: Option<&AppConfig>,
 ) -> Option<PathBuf> {
     match cli_persist {
         Some(PersistOpt::Disabled) => None,
         Some(PersistOpt::Path(p)) => Some(PathBuf::from(p)),
-        None => config.results_db.as_ref().map(|p| PathBuf::from(p)),
+        None => config
+            .and_then(|config| config.results_db.as_ref().map(PathBuf::from))
+            .or_else(|| Some(default_results_db_path())),
     }
 }
 
@@ -320,6 +334,8 @@ fn classify_config_load() -> ConfigLoadState {
 /// Prompts for config values and persists them as `config.toml`.
 fn prompt_for_config() -> AppConfig {
     println!("No usable config.toml found. Enter values to create one.");
+    let default_results_db = default_results_db_path();
+    let default_results_db_display = default_results_db.display().to_string();
 
     let config = AppConfig {
         tptp_root: PathBuf::from(prompt("TPTP root path")),
@@ -346,7 +362,7 @@ fn prompt_for_config() -> AppConfig {
         ),
         max_biconditionals: None,
         engine: None,
-        results_db: None,
+        results_db: Some(prompt_or_default("SQLite results DB path", &default_results_db_display)),
     };
 
     write_config(&config).expect("failed to write config.toml");
@@ -375,11 +391,25 @@ fn prompt(label: &str) -> String {
     input.trim().to_string()
 }
 
+/// Prompts for a value and falls back to a default when the user presses Enter.
+fn prompt_or_default(label: &str, default: &str) -> String {
+    let value = prompt(&format!("{label} [{default}]"));
+    if value.is_empty() {
+        default.to_string()
+    } else {
+        value
+    }
+}
+
 /// Writes the config file in the repository-local TOML-like format expected by
 /// the CLI.
 fn write_config(config: &AppConfig) -> Result<(), String> {
+    let results_db = config
+        .results_db
+        .as_deref()
+        .unwrap_or(DEFAULT_RESULTS_DB);
     let mut contents = format!(
-        "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = {}\nmax_depth = {}\nmax_steps = {}\nmax_fresh_terms_per_quantifier = {}\n",
+        "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = {}\nmax_depth = {}\nmax_steps = {}\nmax_fresh_terms_per_quantifier = {}\nresults_db = \"{}\"\n",
         config.tptp_root.display(),
         config.default_subset_file.display(),
         config
@@ -390,6 +420,7 @@ fn write_config(config: &AppConfig) -> Result<(), String> {
         config
             .max_fresh_terms_per_quantifier
             .unwrap_or(DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER),
+        results_db,
     );
     if let Some(max_biconditionals) = config.max_biconditionals {
         contents.push_str(&format!("max_biconditionals = {max_biconditionals}\n"));

@@ -2,7 +2,11 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-/// Controls where (if anywhere) proof results are persisted.
+/// Controls where proof results are persisted.
+///
+/// The `prove` command persists to SQLite by default. Passing `false`
+/// disables persistence for a single run; any other value is treated as a
+/// database path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PersistOpt {
     /// Disable persistence for this run.
@@ -153,10 +157,17 @@ pub(crate) struct ProveCommand {
     /// if that is also absent.
     #[arg(long = "engine", value_enum)]
     pub(crate) engine: Option<CliSearchEngine>,
-    /// SQLite DB path to persist results, or "false" to disable. Defaults to config.toml value.
-    #[arg(long, value_name = "PATH|false")]
+    /// SQLite DB location to persist results, or `false` to disable persistence.
+    ///
+    /// Persistence is enabled by default. When omitted, the CLI uses the
+    /// `results_db` setting from `config.toml`, or the built-in default of
+    /// `..\results.db` if the config omits that field.
+    #[arg(long, value_name = "DB_LOCATION|false")]
     pub(crate) persist: Option<PersistOpt>,
     /// Human-readable label for this run stored in the DB.
+    ///
+    /// When omitted, a label is generated automatically from the engine name
+    /// and the local timestamp.
     #[arg(long, value_name = "LABEL")]
     pub(crate) run_label: Option<String>,
     /// Input `.p` file or directory of `.p` files to prove.

@@ -1,4 +1,4 @@
-use super::{AppConfig, resolve_persist_path};
+use super::{AppConfig, default_results_db_path, resolve_persist_path};
 use crate::cli::args::PersistOpt;
 use std::fs;
 use std::path::PathBuf;
@@ -77,7 +77,7 @@ fn resolve_persist_path_disabled_returns_none() {
         results_db: Some("./results.db".to_string()),
     };
 
-    let result = resolve_persist_path(Some(&PersistOpt::Disabled), &config);
+    let result = resolve_persist_path(Some(&PersistOpt::Disabled), Some(&config));
     assert_eq!(result, None);
 }
 
@@ -95,10 +95,7 @@ fn resolve_persist_path_with_path_returns_path() {
         results_db: None,
     };
 
-    let result = resolve_persist_path(
-        Some(&PersistOpt::Path("./custom.db".to_string())),
-        &config,
-    );
+    let result = resolve_persist_path(Some(&PersistOpt::Path("./custom.db".to_string())), Some(&config));
     assert_eq!(result, Some(PathBuf::from("./custom.db")));
 }
 
@@ -116,24 +113,12 @@ fn resolve_persist_path_none_uses_config() {
         results_db: Some("./results.db".to_string()),
     };
 
-    let result = resolve_persist_path(None, &config);
+    let result = resolve_persist_path(None, Some(&config));
     assert_eq!(result, Some(PathBuf::from("./results.db")));
 }
 
 #[test]
-fn resolve_persist_path_none_no_config_returns_none() {
-    let config = AppConfig {
-        tptp_root: PathBuf::from("."),
-        default_subset_file: PathBuf::from("subset.txt"),
-        timeout_ms: None,
-        max_depth: None,
-        max_steps: None,
-        max_fresh_terms_per_quantifier: None,
-        max_biconditionals: None,
-        engine: None,
-        results_db: None,
-    };
-
-    let result = resolve_persist_path(None, &config);
-    assert_eq!(result, None);
+fn resolve_persist_path_none_without_config_uses_default() {
+    let result = resolve_persist_path(None, None);
+    assert_eq!(result, Some(default_results_db_path()));
 }

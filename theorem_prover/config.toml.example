@@ -5,3 +5,4 @@ max_depth =
 max_steps =
 max_biconditionals = 
 max_fresh_terms_per_quantifier = 
+results_db = "..\results.db"
