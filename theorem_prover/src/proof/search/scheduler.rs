@@ -10,7 +10,7 @@ use crate::proof::rules::{Rule, RuleMatch, Side, find_applicable_rules};
 use crate::proof::search::branch_state::BranchState;
 
 /// Outcome of trying to schedule the next proof-search step.
-pub(crate) enum ScheduleResult {
+pub enum ScheduleResult {
     Rules(Vec<ScheduledRule>),
     QuantifierExhausted,
     NoRules,
@@ -41,7 +41,7 @@ pub(crate) enum ScheduleResult {
 /// This separation allows the scheduler to enforce the quantifier instantiation
 /// policy (reuse existing terms first, then optionally introduce fresh terms)
 /// while keeping rule application logic simple and uniform downstream.
-pub(crate) enum ScheduledRule {
+pub enum ScheduledRule {
     Standard(RuleMatch),
     ForAllL {
         rule_match: RuleMatch,
@@ -88,7 +88,7 @@ pub(crate) enum ScheduledRule {
 ///
 /// A [`ScheduleResult`] containing the next rules to try, or indicating that no
 /// rules remain or that quantifier exploration was exhausted.
-pub(crate) fn schedule_next_rules(
+pub fn schedule_next_rules(
     sequent: &Sequent,
     state: &BranchState,
     max_fresh_terms_per_quantifier: usize,
@@ -322,7 +322,7 @@ fn schedule_quantifier_instantiations(
 /// - `Some(String)` containing a unique key if the formula at the given position
 ///   is quantified (`∀` or `∃`).
 /// - `None` if the index is out of bounds or the formula is not quantified.
-fn quantified_occurrence_key(sequent: &Sequent, side: Side, index: usize) -> Option<String> {
+pub fn quantified_occurrence_key(sequent: &Sequent, side: Side, index: usize) -> Option<String> {
     let formulas = match side {
         Side::Left => &sequent.left,
         Side::Right => &sequent.right,

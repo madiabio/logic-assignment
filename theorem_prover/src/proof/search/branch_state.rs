@@ -6,13 +6,13 @@ use crate::ast::Term;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Search state that is threaded through a single proof branch.
-pub(crate) struct BranchState {
-    pub(crate) quantifier_usage: BTreeMap<String, QuantifierUsage>,
+pub struct BranchState {
+    pub quantifier_usage: BTreeMap<String, QuantifierUsage>,
 }
 
 impl BranchState {
     /// Creates empty branch state. Candidate terms are read from the current sequent.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             quantifier_usage: BTreeMap::new(),
         }
@@ -21,9 +21,9 @@ impl BranchState {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Tracks which terms have been tried for one quantified occurrence.
-pub(crate) struct QuantifierUsage {
-    pub(crate) used_terms: BTreeSet<Term>,
-    pub(crate) fresh_terms_used: usize,
+pub struct QuantifierUsage {
+    pub used_terms: BTreeSet<Term>,
+    pub fresh_terms_used: usize,
 }
 
 /// Records the use of a term for a specific quantified formula occurrence on this branch.
@@ -52,7 +52,7 @@ pub(crate) struct QuantifierUsage {
 ///
 /// This ensures that future scheduling avoids repeating the same instantiations
 /// and respects the configured fresh-term budget.
-pub(crate) fn record_quantifier_term(
+pub fn record_quantifier_term(
     state: &mut BranchState,
     key: &str,
     term: &Term,

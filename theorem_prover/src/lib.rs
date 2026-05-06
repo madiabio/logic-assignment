@@ -8,3 +8,11 @@ pub use parser::{FormulaRecord, IncludeDirective, ParsedProblem, parse_problem, 
 pub use pipeline::*;
 pub use proof::prover::*;
 pub use proof::sequent::*;
+
+// Re-exports used only in integration tests. Not part of the stable public API.
+#[doc(hidden)]
+pub use proof::search::scheduler::{ScheduleResult, ScheduledRule, quantified_occurrence_key, schedule_next_rules};
+#[doc(hidden)]
+pub use proof::search::branch_state::{BranchState, record_quantifier_term};
+#[doc(hidden)]
+pub use proof::rules::{Rule, Side, RuleMatch};
