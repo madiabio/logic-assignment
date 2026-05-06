@@ -88,7 +88,7 @@ pub enum ScheduledRule {
 ///
 /// A [`ScheduleResult`] containing the next rules to try, or indicating that no
 /// rules remain or that quantifier exploration was exhausted.
-pub fn schedule_next_rules(
+pub(crate) fn schedule_next_rules(
     sequent: &Sequent,
     state: &BranchState,
     max_fresh_terms_per_quantifier: usize,

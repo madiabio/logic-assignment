@@ -7,7 +7,7 @@ use crate::ast::Term;
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Search state that is threaded through a single proof branch.
 pub struct BranchState {
-    pub quantifier_usage: BTreeMap<String, QuantifierUsage>,
+    pub(crate) quantifier_usage: BTreeMap<String, QuantifierUsage>,
 }
 
 impl BranchState {
@@ -21,7 +21,7 @@ impl BranchState {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Tracks which terms have been tried for one quantified occurrence.
-pub struct QuantifierUsage {
+pub(crate) struct QuantifierUsage {
     pub used_terms: BTreeSet<Term>,
     pub fresh_terms_used: usize,
 }

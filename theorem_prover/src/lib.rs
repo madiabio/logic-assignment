@@ -11,7 +11,7 @@ pub use proof::sequent::*;
 
 // Re-exports used only in integration tests. Not part of the stable public API.
 #[doc(hidden)]
-pub use proof::search::scheduler::{ScheduleResult, ScheduledRule, quantified_occurrence_key, schedule_next_rules};
+pub use proof::search::scheduler::{ScheduleResult, ScheduledRule, quantified_occurrence_key};
 #[doc(hidden)]
 pub use proof::search::branch_state::{BranchState, record_quantifier_term};
 #[doc(hidden)]
