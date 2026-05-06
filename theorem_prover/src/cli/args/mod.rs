@@ -1,5 +1,27 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+use std::str::FromStr;
+
+/// Controls where (if anywhere) proof results are persisted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PersistOpt {
+    /// Disable persistence for this run.
+    Disabled,
+    /// Persist to the given file path.
+    Path(String),
+}
+
+impl FromStr for PersistOpt {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "false" {
+            Ok(PersistOpt::Disabled)
+        } else {
+            Ok(PersistOpt::Path(s.to_string()))
+        }
+    }
+}
 
 /// Retry/display flags shared across CLI subcommands.
 #[derive(Clone, Args)]
@@ -133,7 +155,7 @@ pub(crate) struct ProveCommand {
     pub(crate) engine: Option<CliSearchEngine>,
     /// SQLite DB path to persist results, or "false" to disable. Defaults to config.toml value.
     #[arg(long, value_name = "PATH|false")]
-    pub(crate) persist: Option<String>,
+    pub(crate) persist: Option<PersistOpt>,
     /// Human-readable label for this run stored in the DB.
     #[arg(long, value_name = "LABEL")]
     pub(crate) run_label: Option<String>,
