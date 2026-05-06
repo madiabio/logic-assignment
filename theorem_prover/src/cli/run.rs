@@ -304,5 +304,7 @@ fn engine_name(engine: SearchEngine) -> &'static str {
     match engine {
         SearchEngine::Naive => "naive",
         SearchEngine::IterativeDeepening => "id",
+        SearchEngine::Priority => "priority",
+        SearchEngine::PriorityId => "priority-id",
     }
 }

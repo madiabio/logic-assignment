@@ -60,25 +60,28 @@ pub(crate) enum OutputFormat {
 
 /// Proof-search strategy selectable via `--engine` or `engine` in `config.toml`.
 ///
-/// The two variants map directly to the library's [`theorem_prover::SearchEngine`]:
-/// - `naive`  → [`theorem_prover::SearchEngine::Naive`]
-/// - `id`     → [`theorem_prover::SearchEngine::IterativeDeepening`]
+/// Variants map to [`theorem_prover::SearchEngine`]:
+/// - `naive`        → [`theorem_prover::SearchEngine::Naive`]
+/// - `id`           → [`theorem_prover::SearchEngine::IterativeDeepening`]
+/// - `priority`     → [`theorem_prover::SearchEngine::Priority`]
+/// - `priority-id`  → [`theorem_prover::SearchEngine::PriorityId`]
 ///
 /// When the flag is absent from both the command line and `config.toml`, the
 /// prover falls back to [`CliSearchEngine::Naive`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub(crate) enum CliSearchEngine {
-    /// Depth-first backward search.
-    ///
-    /// Explores the proof tree using a single depth-limited DFS pass.
-    /// This is the default strategy.
+    /// Depth-first backward search. This is the default strategy.
     Naive,
     /// Iterative-deepening backward search.
     ///
     /// Repeatedly runs depth-limited DFS with depth limits 1, 2, 3, … up to
     /// the configured `--max-depth`, returning as soon as a proof is found.
-    /// Guarantees that the shallowest proof is always found first.
     Id,
+    /// Depth-first backward search with the LK′ 6-class priority scheduler.
+    Priority,
+    /// Iterative-deepening backward search with the LK′ 6-class priority scheduler.
+    #[value(name = "priority-id")]
+    PriorityId,
 }
 
 /// Top-level CLI options for the theorem prover executable.
