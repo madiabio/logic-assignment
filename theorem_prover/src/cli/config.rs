@@ -25,6 +25,7 @@
 //!    - `max_fresh_terms_per_quantifier` — fresh fallback terms per quantifier occurrence
 //!    - `max_biconditionals` — biconditional gate before parsing
 //!    - `engine` — proof-search strategy: `"naive"` or `"id"`
+//!    - `results_db` — path to SQLite database for persisting proof results
 //!
 //! 3. **Interactive prompts** (if `config.toml` is missing)
 //!    — prompts for the required fields on first run
@@ -57,7 +58,6 @@ pub(crate) struct AppConfig {
     /// Proof-search engine. `None` means the library default (`naive`) applies.
     pub(crate) engine: Option<CliSearchEngine>,
     /// Path to the SQLite database file for persisting proof results.
-    #[allow(dead_code)]
     pub(crate) results_db: Option<String>,
 }
 
