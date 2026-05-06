@@ -75,8 +75,8 @@ pub fn build_problem_sequent(input: &str) -> Result<Sequent, ProblemPipelineErro
 
 /// Builds the initial sequent for one problem file after recursively loading includes.
 pub fn build_problem_sequent_from_path(path: &Path) -> Result<Sequent, ProblemPipelineError> {
-    let parsed = load_problem_from_path(path)?;
-    Sequent::from_parsed_problem(parsed).map_err(ProblemPipelineError::SequentBuild)
+    let loaded = load_problem_from_path(path)?;
+    Sequent::from_parsed_problem(loaded.parsed).map_err(ProblemPipelineError::SequentBuild)
 }
 
 /// Runs a problem with default pipeline and proof-search options.
@@ -87,6 +87,18 @@ pub fn run_problem(input: &str) -> Result<ProofResult, ProblemPipelineError> {
 /// Runs one on-disk problem after recursively loading includes.
 pub fn run_problem_from_path(path: &Path) -> Result<ProofResult, ProblemPipelineError> {
     run_problem_from_path_with_options(path, RunProblemOptions::default())
+}
+
+fn run_problem_impl(
+    sequent: &Sequent,
+    options: RunProblemOptions<'_>,
+) -> Result<ProofResult, ProblemPipelineError> {
+    static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
+    let cancel_requested = options.cancel_requested.unwrap_or(&NEVER_CANCELLED);
+    if options.show_sequent {
+        println!("{sequent}");
+    }
+    Ok(prove_with_cancel(sequent, options.proof, cancel_requested))
 }
 
 /// Runs a problem with explicit pipeline options.
@@ -101,13 +113,8 @@ pub fn run_problem_with_options(
         });
     }
 
-    static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
-    let cancel_requested = options.cancel_requested.unwrap_or(&NEVER_CANCELLED);
     let sequent = build_problem_sequent(input)?;
-    if options.show_sequent {
-        println!("{sequent}");
-    }
-    Ok(prove_with_cancel(&sequent, options.proof, cancel_requested))
+    run_problem_impl(&sequent, options)
 }
 
 /// Runs one on-disk problem with explicit pipeline options after recursively loading includes.
@@ -115,22 +122,17 @@ pub fn run_problem_from_path_with_options(
     path: &Path,
     options: RunProblemOptions<'_>,
 ) -> Result<ProofResult, ProblemPipelineError> {
-    if let Some(input) = read_problem_text(path)? {
-        if options.biconditional_policy.is_exceeded_by(&input) {
-            return Ok(ProofResult {
-                status: crate::ProofStatus::Unknown,
-                unknown_reason: Some(UnknownReason::BiconditionalCapExceeded),
-            });
-        }
+    let loaded = load_problem_from_path(path)?;
+    if options.biconditional_policy.is_exceeded_by(&loaded.input) {
+        return Ok(ProofResult {
+            status: crate::ProofStatus::Unknown,
+            unknown_reason: Some(UnknownReason::BiconditionalCapExceeded),
+        });
     }
 
-    static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
-    let cancel_requested = options.cancel_requested.unwrap_or(&NEVER_CANCELLED);
-    let sequent = build_problem_sequent_from_path(path)?;
-    if options.show_sequent {
-        println!("{sequent}");
-    }
-    Ok(prove_with_cancel(&sequent, options.proof, cancel_requested))
+    let sequent =
+        Sequent::from_parsed_problem(loaded.parsed).map_err(ProblemPipelineError::SequentBuild)?;
+    run_problem_impl(&sequent, options)
 }
 
 fn count_non_comment_biconditionals(input: &str) -> usize {
@@ -145,18 +147,33 @@ fn count_non_comment_biconditionals(input: &str) -> usize {
     count
 }
 
-fn load_problem_from_path(path: &Path) -> Result<ParsedProblem, ProblemPipelineError> {
+struct LoadedProblem {
+    input: String,
+    parsed: ParsedProblem,
+}
+
+fn load_problem_from_path(path: &Path) -> Result<LoadedProblem, ProblemPipelineError> {
     let canonical_path = canonicalize_problem_path(path)?;
     let include_root = infer_include_root(&canonical_path)?;
     let mut loaded = HashSet::new();
     let mut stack = Vec::new();
-    load_problem_recursive(&canonical_path, &include_root, true, &mut loaded, &mut stack)
+    let input = read_problem_text(&canonical_path)?;
+    let parsed = load_problem_recursive(
+        &canonical_path,
+        &include_root,
+        true,
+        Some(&input),
+        &mut loaded,
+        &mut stack,
+    )?;
+    Ok(LoadedProblem { input, parsed })
 }
 
 fn load_problem_recursive(
     canonical_path: &Path,
     include_root: &Path,
     is_top_level: bool,
+    top_level_input: Option<&str>,
     loaded: &mut HashSet<PathBuf>,
     stack: &mut Vec<PathBuf>,
 ) -> Result<ParsedProblem, ProblemPipelineError> {
@@ -172,8 +189,14 @@ fn load_problem_recursive(
     }
 
     stack.push(canonical_path.to_path_buf());
-    let input = read_problem_text(canonical_path)?
-        .expect("canonicalized problem path should still be readable");
+    let input = if is_top_level {
+        top_level_input.map(str::to_owned).unwrap_or_else(|| {
+            read_problem_text(canonical_path)
+                .expect("canonicalized problem path should still be readable")
+        })
+    } else {
+        read_problem_text(canonical_path)?
+    };
     let mut parsed =
         parse_problem(&input).map_err(|err| ProblemPipelineError::Parse(err.to_string()))?;
 
@@ -189,13 +212,8 @@ fn load_problem_recursive(
     let conjecture = parsed.conjecture.take();
     for include in parsed.includes {
         let include_path = resolve_include_path(include_root, &include.path)?;
-        let included = load_problem_recursive(
-            &include_path,
-            include_root,
-            false,
-            loaded,
-            stack,
-        )?;
+        let included =
+            load_problem_recursive(&include_path, include_root, false, None, loaded, stack)?;
         merged_premises.extend(included.premises);
     }
 
@@ -207,12 +225,12 @@ fn load_problem_recursive(
     })
 }
 
-fn read_problem_text(path: &Path) -> Result<Option<String>, ProblemPipelineError> {
+fn read_problem_text(path: &Path) -> Result<String, ProblemPipelineError> {
     match fs::read_to_string(path) {
-        Ok(input) => Ok(Some(input)),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Err(ProblemPipelineError::Include(
-            format!("failed to read {}: {err}", path.display()),
-        )),
+        Ok(input) => Ok(input),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Err(
+            ProblemPipelineError::Include(format!("failed to read {}: {err}", path.display())),
+        ),
         Err(err) => Err(ProblemPipelineError::Include(format!(
             "failed to read {}: {err}",
             path.display()
@@ -251,13 +269,10 @@ fn infer_include_root(problem_path: &Path) -> Result<PathBuf, ProblemPipelineErr
         }
     }
 
-    problem_path
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| {
-            ProblemPipelineError::Include(format!(
-                "failed to determine include root for {}",
-                problem_path.display()
-            ))
-        })
+    problem_path.parent().map(Path::to_path_buf).ok_or_else(|| {
+        ProblemPipelineError::Include(format!(
+            "failed to determine include root for {}",
+            problem_path.display()
+        ))
+    })
 }

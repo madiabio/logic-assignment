@@ -1,5 +1,17 @@
-tptp_problems/
-tptp_problems*/
+tptp_problem*/
+tptp_problem*
+
 target/
 TPTP-v9.2.1/
 config.toml
+.claude/
+.harper-dictionary.txt
+3806ict-assignment1-2026.pdf
+TPTP Language.html
+algorithm_2.png
+results.db
+sample_problems/
+
+misc/
+.venv/
+__pycache__/

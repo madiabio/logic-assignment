@@ -1,21 +1,29 @@
-//! Depth-first backward proof search with timeout and bounded search handling.
+//! Backward proof search dispatcher and shared infrastructure.
 //!
-//! Default prover limits are defined by:
+//! This module owns the public prover API ([`prove`], [`prove_with_cancel`]),
+//! the shared [`backwards_search`] kernel used by both strategies, and the
+//! types that cross module boundaries ([`ProofOptions`], [`ProofResult`],
+//! [`SearchEngine`], [`UnknownReason`]).
+//!
+//! Concrete search strategies live in the submodules:
+//! - [`naive`] — single-pass depth-first backward search
+//! - [`iterative_deepening`] — repeated DFS with increasing depth limits
+//!
+//! Default prover limits:
 //! - [`crate::proof::defaults::DEFAULT_PROVE_TIMEOUT`]
 //! - [`crate::proof::defaults::DEFAULT_MAX_DEPTH`]
 //! - [`crate::proof::defaults::DEFAULT_MAX_STEPS`]
 //! - [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`]
 //!
 //! CLI usage:
-//! - `cargo run -- prove problem.p`
-//! - `cargo run -- prove --timeout-ms 1000 problem.p`
-//! - `cargo run -- prove --max-depth 64 problem.p`
-//! - `cargo run -- prove --max-steps 10000 problem.p`
-//! - `cargo run -- prove --timeout-ms 1000 --max-depth 64 --max-steps 10000 problem.p`
-//!
-//! Rule inspection uses the separate `rules` subcommand:
-//! - `cargo run -- rules problem.p`
-//! - `cargo run -- rules --show-sequent problem.p`
+//! ```text
+//! cargo run -- prove problem.p
+//! cargo run -- prove --timeout-ms 1000 problem.p
+//! cargo run -- prove --max-depth 64 problem.p
+//! cargo run -- prove --max-steps 10000 problem.p
+//! cargo run -- prove --engine naive problem.p   # default
+//! cargo run -- prove --engine id     problem.p   # iterative deepening
+//! ```
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -32,6 +40,20 @@ use crate::proof::defaults::{
 };
 use crate::proof::search::branch_state::{BranchState, record_quantifier_term};
 use crate::proof::search::scheduler::{ScheduleResult, ScheduledRule, schedule_next_rules};
+
+mod naive;
+mod iterative_deepening;
+
+/// Selects the backward-search strategy used by [`prove_with_cancel`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchEngine {
+    /// Depth-first backward search (the original strategy).
+    Naive,
+    /// Iterative-deepening backward search: repeats depth-first search with
+    /// increasing depth limits until the proof is found or the global limit is
+    /// reached.
+    IterativeDeepening,
+}
 
 /// Explains why a proof attempt ended with [`ProofStatus::Unknown`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +90,10 @@ pub struct ProofOptions {
     /// The default comes from
     /// [`crate::proof::defaults::DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER`].
     pub max_fresh_terms_per_quantifier: usize,
+    /// Proof-search strategy to use.
+    ///
+    /// The default is [`SearchEngine::Naive`].
+    pub engine: SearchEngine,
 }
 
 impl Default for ProofOptions {
@@ -77,6 +103,7 @@ impl Default for ProofOptions {
             max_depth: DEFAULT_MAX_DEPTH,
             max_steps: DEFAULT_MAX_STEPS,
             max_fresh_terms_per_quantifier: DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER,
+            engine: SearchEngine::Naive,
         }
     }
 }
@@ -110,7 +137,7 @@ pub struct ProofResult {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Internal search outcome used while combining branch results.
-enum SearchOutcome {
+pub(super) enum SearchOutcome {
     Provable,
     NotProvable,
     Timeout,
@@ -121,8 +148,23 @@ enum SearchOutcome {
 }
 
 impl SearchOutcome {
-    /// Converts an internal search outcome into the public proof result.
-    fn into_result(self) -> ProofResult {
+    /// Converts an internal [`SearchOutcome`] into a public-facing [`ProofResult`].
+    ///
+    /// This maps internal search states to the externally visible
+    /// [`ProofStatus`] while preserving additional diagnostic information
+    /// (such as [`UnknownReason`]) when applicable.
+    ///
+    /// - `Provable` → successful proof
+    /// - `NotProvable` → saturated search without finding a proof
+    /// - `Unknown` → search stopped due to a bounded resource (e.g. depth,
+    ///   steps, quantifier budget), with a reason attached
+    /// - `Timeout`, `Cancelled`, `NotImplemented`, `Error` → corresponding
+    ///   operational outcomes
+    ///
+    /// # Returns
+    ///
+    /// A [`ProofResult`] suitable for external reporting.
+    pub(super) fn into_result(self) -> ProofResult {
         match self {
             SearchOutcome::Provable => ProofResult {
                 status: ProofStatus::Provable,
@@ -155,8 +197,24 @@ impl SearchOutcome {
         }
     }
 
-    /// Keeps the more informative of two non-successful search outcomes.
-    fn merge(self, other: Self) -> Self {
+    /// Combines two search outcomes, keeping the more informative one.
+    ///
+    /// This is used when exploring multiple branches: if none succeed,
+    /// the search returns the "best" failure signal observed.
+    ///
+    /// The ordering is defined by [`priority`], preferring outcomes that
+    /// convey stronger or more useful information (e.g. `Timeout` over
+    /// `Unknown`, `Unknown` over `NotProvable`).
+    ///
+    /// # Parameters
+    ///
+    /// - `self`: The current best outcome.
+    /// - `other`: A newly observed outcome.
+    ///
+    /// # Returns
+    ///
+    /// The outcome with higher priority.
+    pub(super) fn merge(self, other: Self) -> Self {
         if self.priority() >= other.priority() {
             self
         } else {
@@ -164,7 +222,25 @@ impl SearchOutcome {
         }
     }
 
-    /// Returns the precedence used when combining competing outcomes.
+    /// Returns the priority used when comparing search outcomes.
+    ///
+    /// Higher values indicate more informative or dominant outcomes when
+    /// merging competing results from different branches.
+    ///
+    /// Priority order (highest to lowest):
+    ///
+    /// ```text
+    /// Provable > Timeout > Cancelled > Unknown > NotImplemented/Error > NotProvable
+    /// ```
+    ///
+    /// This ordering ensures that:
+    /// - Success (`Provable`) dominates all other outcomes.
+    /// - Resource limits (`Timeout`, `Cancelled`) are preserved over weaker signals.
+    /// - `Unknown` is preferred over incorrectly concluding `NotProvable`.
+    ///
+    /// # Returns
+    ///
+    /// A numeric priority value used for comparison.
     fn priority(self) -> u8 {
         match self {
             SearchOutcome::Provable => 5,
@@ -179,35 +255,99 @@ impl SearchOutcome {
 }
 
 /// Attempts to prove a sequent within the configured timeout and search bounds.
+///
+/// Equivalent to [`prove_with_cancel`] with a cancellation flag that is never
+/// set.  Use this when there is no external signal that should interrupt search.
+///
+/// The search strategy is selected by [`ProofOptions::engine`].
+///
+/// # Parameters
+///
+/// - `sequent`: The goal sequent to prove.
+/// - `options`: Proof-search limits and strategy configuration.
+///
+/// # Returns
+///
+/// A [`ProofResult`] describing the outcome.
 pub fn prove(sequent: &Sequent, options: ProofOptions) -> ProofResult {
     static NEVER_CANCELLED: AtomicBool = AtomicBool::new(false);
     prove_with_cancel(sequent, options, &NEVER_CANCELLED)
 }
 
 /// Attempts to prove a sequent while observing an external cancellation flag.
+///
+/// Dispatches to the search strategy specified by [`ProofOptions::engine`]:
+///
+/// - [`SearchEngine::Naive`] → [`naive`] (single-pass depth-first search)
+/// - [`SearchEngine::IterativeDeepening`] → [`iterative_deepening`] (repeated
+///   DFS with depth limits 1, 2, … up to [`ProofOptions::max_depth`])
+///
+/// Search stops as soon as `cancel_requested` is observed as `true`, the
+/// wall-clock deadline is reached, or the strategy returns a definitive result.
+///
+/// # Parameters
+///
+/// - `sequent`: The goal sequent to prove.
+/// - `options`: Proof-search limits and strategy configuration.
+/// - `cancel_requested`: An [`AtomicBool`] that, when set to `true`, causes
+///   search to stop and return [`ProofStatus::Cancelled`].
+///
+/// # Returns
+///
+/// A [`ProofResult`] describing the outcome.
 pub fn prove_with_cancel(
     sequent: &Sequent,
     options: ProofOptions,
     cancel_requested: &AtomicBool,
 ) -> ProofResult {
     let deadline = Instant::now() + options.timeout;
-    let state = BranchState::new();
-    let mut steps_taken = 0usize;
-
-    backwards_search(
-        sequent,
-        deadline,
-        &state,
-        &options,
-        cancel_requested,
-        0,
-        &mut steps_taken,
-    )
+    match options.engine {
+        SearchEngine::Naive => naive::run(sequent, deadline, &options, cancel_requested),
+        SearchEngine::IterativeDeepening => {
+            iterative_deepening::run(sequent, deadline, &options, cancel_requested)
+        }
+    }
     .into_result()
 }
 
-/// Performs backward search from a single sequent until it closes or fails.
-fn backwards_search(
+/// Performs recursive backward proof search from the given sequent.
+///
+/// The search repeatedly asks the scheduler for the next applicable rule(s),
+/// applies each candidate rule, and recursively attempts to prove the generated
+/// premises. A branch succeeds as soon as one rule application closes the sequent
+/// or all of its premises are provable.
+///
+/// Search is bounded by:
+///
+/// - `deadline`, for wall-clock timeout control
+/// - `options.max_depth`, for recursive search depth
+/// - `options.max_steps`, for total rule-application attempts
+/// - `options.max_fresh_terms_per_quantifier`, for quantified-rule fallback terms
+/// - `cancel_requested`, for external cancellation
+///
+/// The returned [`SearchOutcome`] is conservative: if search cannot safely
+/// conclude that the sequent is not provable because a configured limit or
+/// quantifier budget was reached, it returns [`SearchOutcome::Unknown`] with the
+/// relevant [`UnknownReason`] instead of [`SearchOutcome::NotProvable`].
+///
+/// # Parameters
+///
+/// - `sequent`: The current sequent to prove.
+/// - `deadline`: The instant after which search should stop with
+///   [`SearchOutcome::Timeout`].
+/// - `state`: Branch-local search state, including quantifier-instantiation
+///   history.
+/// - `options`: Proof-search limits and configuration.
+/// - `cancel_requested`: Shared cancellation flag checked during search.
+/// - `depth`: Current recursive search depth.
+/// - `steps_taken`: Mutable counter tracking total search steps across the
+///   proof attempt.
+///
+/// # Returns
+///
+/// A [`SearchOutcome`] describing whether the sequent was proved, disproved
+/// within the implemented fragment, stopped by a limit, cancelled, or failed.
+pub(super) fn backwards_search(
     sequent: &Sequent,
     deadline: Instant,
     state: &BranchState,
@@ -278,11 +418,17 @@ fn backwards_search(
         };
 
         let outcome = match application {
+            // If a rule application leads to a closed branch, then the rule application has
+            // succeeded
             RuleApplication::Closed => SearchOutcome::Provable,
+
+            // If a rule isnt implemented (shouldnt really ever happen now)
             RuleApplication::NotImplemented => {
                 warn!("Not implemented rule.");
                 SearchOutcome::NotImplemented
             }
+
+            // Recursively prove the premises
             RuleApplication::Premises(premises) => prove_premises(
                 &premises,
                 deadline,
@@ -292,6 +438,8 @@ fn backwards_search(
                 depth + 1,
                 steps_taken,
             ),
+
+            // Error handling.
             RuleApplication::Error => {
                 warn!("Error.");
                 SearchOutcome::Error
@@ -311,7 +459,46 @@ fn backwards_search(
     best
 }
 
-/// Proves all premises generated by a rule application on the current branch.
+/// Attempts to prove all premises generated by a rule application.
+///
+/// This function is used after applying a backward rule that produces one or
+/// more subgoals (premises). It evaluates each premise sequentially using
+/// [`backwards_search`].
+///
+/// The result follows standard sequent-calculus semantics:
+///
+/// - If **all premises are provable**, the rule application succeeds and this
+///   returns [`SearchOutcome::Provable`].
+/// - If **any premise fails** (i.e. returns something other than `Provable`),
+///   that outcome is returned immediately and the remaining premises are not
+///   explored.
+///
+/// This implements logical conjunction over premises:
+///
+/// ```text
+/// Γ ⊢ Δ   is provable  iff  every premise Γᵢ ⊢ Δᵢ is provable
+/// ```
+///
+/// # Parameters
+///
+/// - `premises`: The list of sub-sequents that must all be proved.
+/// - `deadline`: Global timeout for the overall proof search.
+/// - `state`: Current branch-local search state.
+/// - `options`: Proof search configuration and limits.
+/// - `cancel_requested`: Shared cancellation flag.
+/// - `depth`: Current recursion depth (passed through unchanged).
+/// - `steps_taken`: Global counter of search steps.
+///
+/// # Returns
+///
+/// - [`SearchOutcome::Provable`] if all premises are proved.
+/// - Otherwise, returns the first non-`Provable` outcome encountered
+///   (e.g. `Unknown`, `Timeout`, `Cancelled`, etc.).
+///
+/// # Notes
+///
+/// - Premises are evaluated left-to-right with short-circuiting.
+/// - Cancellation is checked between premises to allow early termination.
 fn prove_premises(
     premises: &[Sequent],
     deadline: Instant,

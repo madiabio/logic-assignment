@@ -4,26 +4,39 @@
 //!
 //! ## Configuration Sources
 //!
-//! The CLI accepts configuration from multiple sources with the following precedence:
+//! The CLI accepts configuration from multiple sources with the following precedence
+//! (highest wins):
 //!
-//! 1. **CLI flags** (highest priority)
-//!    - `--tptp-root <PATH>` - Override TPTP root directory
-//!    - `--subset-file <PATH>` - Override subset file path
+//! 1. **CLI flags**
+//!    - `--tptp-root <PATH>`
+//!    - `--subset-file <PATH>`
+//!    - `--timeout-ms <MS>`
+//!    - `--max-depth <N>`
+//!    - `--max-steps <N>`
+//!    - `--max-fresh-terms-per-quantifier <N>`
+//!    - `--engine naive|id`
 //!
-//! 2. **config.toml** (medium priority)
-//!    - `tptp_root` - Path to TPTP-v9.x.x root directory
-//!    - `default_subset_file` - Path to default subset file
+//! 2. **`config.toml`** (keys accepted)
+//!    - `tptp_root` — path to TPTP-v9.x.x root directory *(required)*
+//!    - `default_subset_file` — path to default subset file *(required)*
+//!    - `timeout_ms` — wall-clock timeout in milliseconds
+//!    - `max_depth` — maximum recursive proof-search depth
+//!    - `max_steps` — maximum proof-search steps
+//!    - `max_fresh_terms_per_quantifier` — fresh fallback terms per quantifier occurrence
+//!    - `max_biconditionals` — biconditional gate before parsing
+//!    - `engine` — proof-search strategy: `"naive"` or `"id"`
+//!    - `results_db` — path to SQLite database for persisting proof results
+//!      (`..\results.db` is used when this field is omitted)
 //!
-//! 3. **Interactive prompts** (if config.toml is missing)
-//!    - Prompts user to provide configuration values on first run
+//! 3. **Interactive prompts** (if `config.toml` is missing)
+//!    — prompts for the required fields on first run
 //!
 //! ## Configuration Requirements
 //!
-//! The system requires both a TPTP root directory and a subset file to run. If either is
-//! missing from all sources, the command will fail with an error message indicating which
-//! setting is missing and how to provide it.
+//! `tptp_root` and `default_subset_file` must be present in either the CLI flags or
+//! `config.toml`. All other keys are optional and fall back to library defaults when absent.
 
-use crate::cli::args::ProveCommand;
+use crate::cli::args::{CliSearchEngine, PersistOpt, ProveCommand};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -31,7 +44,9 @@ use theorem_prover::proof::defaults::{
     DEFAULT_MAX_DEPTH, DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER, DEFAULT_MAX_STEPS,
     DEFAULT_PROVE_TIMEOUT,
 };
-use theorem_prover::{BiconditionalPolicy, ProofOptions};
+use theorem_prover::{BiconditionalPolicy, ProofOptions, SearchEngine};
+
+const DEFAULT_RESULTS_DB: &str = r"..\results.db";
 
 /// Persistent defaults used by config-backed CLI runs.
 #[derive(Clone, Debug)]
@@ -43,6 +58,13 @@ pub(crate) struct AppConfig {
     pub(crate) max_steps: Option<usize>,
     pub(crate) max_fresh_terms_per_quantifier: Option<usize>,
     pub(crate) max_biconditionals: Option<usize>,
+    /// Proof-search engine. `None` means the library default (`naive`) applies.
+    pub(crate) engine: Option<CliSearchEngine>,
+    /// Path to the SQLite database file for persisting proof results.
+    ///
+    /// When this field is omitted, the runtime falls back to
+    /// [`default_results_db_path()`].
+    pub(crate) results_db: Option<String>,
 }
 
 #[derive(Debug)]
@@ -87,6 +109,11 @@ pub(crate) fn ensure_config() -> Result<AppConfig, EnsureConfigError> {
     }
 }
 
+/// Returns the built-in SQLite database path used when no config override is present.
+pub(crate) fn default_results_db_path() -> PathBuf {
+    PathBuf::from(DEFAULT_RESULTS_DB)
+}
+
 /// Validates and merges TPTP configuration from CLI arguments and config.toml.
 ///
 /// Precedence:
@@ -118,8 +145,26 @@ pub(crate) fn validate_and_merge_tptp_config(
     Ok((tptp_root, subset_file))
 }
 
-/// Builds prover options using CLI overrides, then config defaults, then
-/// library defaults.
+/// Resolves the effective persistence path for a run, considering CLI override and config.
+///
+/// Persistence is enabled by default. `false` disables it, an explicit path
+/// overrides everything, and the fallback path is either `config.toml`'s
+/// `results_db` value or the built-in `..\results.db`.
+pub(crate) fn resolve_persist_path(
+    cli_persist: Option<&PersistOpt>,
+    config: Option<&AppConfig>,
+) -> Option<PathBuf> {
+    match cli_persist {
+        Some(PersistOpt::Disabled) => None,
+        Some(PersistOpt::Path(p)) => Some(PathBuf::from(p)),
+        None => config
+            .and_then(|config| config.results_db.as_ref().map(PathBuf::from))
+            .or_else(|| Some(default_results_db_path())),
+    }
+}
+
+/// Builds prover options by merging library defaults, `config.toml` settings,
+/// and CLI flags in that order (CLI flags take highest precedence).
 pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
     let mut proof_options = ProofOptions::default();
     if let Some(config) = load_config_if_present() {
@@ -135,6 +180,9 @@ pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
         if let Some(max_fresh_terms_per_quantifier) = config.max_fresh_terms_per_quantifier {
             proof_options.max_fresh_terms_per_quantifier = max_fresh_terms_per_quantifier;
         }
+        if let Some(engine) = config.engine {
+            proof_options.engine = cli_engine_to_search_engine(engine);
+        }
     }
 
     if let Some(timeout_ms) = options.timeout_ms {
@@ -149,7 +197,17 @@ pub(crate) fn prover_options_from_cli(options: &ProveCommand) -> ProofOptions {
     if let Some(max_fresh_terms_per_quantifier) = options.max_fresh_terms_per_quantifier {
         proof_options.max_fresh_terms_per_quantifier = max_fresh_terms_per_quantifier;
     }
+    if let Some(engine) = options.engine {
+        proof_options.engine = cli_engine_to_search_engine(engine);
+    }
     proof_options
+}
+
+fn cli_engine_to_search_engine(engine: CliSearchEngine) -> SearchEngine {
+    match engine {
+        CliSearchEngine::Naive => SearchEngine::Naive,
+        CliSearchEngine::Id => SearchEngine::IterativeDeepening,
+    }
 }
 
 /// Builds the biconditional input policy using CLI overrides, then config defaults.
@@ -179,6 +237,8 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
     let mut max_steps = None;
     let mut max_fresh_terms_per_quantifier = None;
     let mut max_biconditionals = None;
+    let mut engine: Option<CliSearchEngine> = None;
+    let mut results_db = None;
 
     for raw_line in config_contents.lines() {
         let line = raw_line.trim();
@@ -227,6 +287,20 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
                         format!("invalid max_biconditionals in config.toml: {err}")
                     })?)
             }
+            "engine" => {
+                engine = Some(match value {
+                    "naive" => CliSearchEngine::Naive,
+                    "id" => CliSearchEngine::Id,
+                    other => {
+                        return Err(format!(
+                            "invalid engine in config.toml: '{other}', expected 'naive' or 'id'"
+                        ))
+                    }
+                });
+            }
+            "results_db" => {
+                results_db = Some(value.to_string());
+            }
             _ => {}
         }
     }
@@ -240,6 +314,8 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
         max_steps,
         max_fresh_terms_per_quantifier,
         max_biconditionals,
+        engine,
+        results_db,
     })
 }
 
@@ -258,6 +334,8 @@ fn classify_config_load() -> ConfigLoadState {
 /// Prompts for config values and persists them as `config.toml`.
 fn prompt_for_config() -> AppConfig {
     println!("No usable config.toml found. Enter values to create one.");
+    let default_results_db = default_results_db_path();
+    let default_results_db_display = default_results_db.display().to_string();
 
     let config = AppConfig {
         tptp_root: PathBuf::from(prompt("TPTP root path")),
@@ -283,6 +361,8 @@ fn prompt_for_config() -> AppConfig {
                 .expect("max_fresh_terms_per_quantifier must be an integer"),
         ),
         max_biconditionals: None,
+        engine: None,
+        results_db: Some(prompt_or_default("SQLite results DB path", &default_results_db_display)),
     };
 
     write_config(&config).expect("failed to write config.toml");
@@ -311,11 +391,25 @@ fn prompt(label: &str) -> String {
     input.trim().to_string()
 }
 
+/// Prompts for a value and falls back to a default when the user presses Enter.
+fn prompt_or_default(label: &str, default: &str) -> String {
+    let value = prompt(&format!("{label} [{default}]"));
+    if value.is_empty() {
+        default.to_string()
+    } else {
+        value
+    }
+}
+
 /// Writes the config file in the repository-local TOML-like format expected by
 /// the CLI.
 fn write_config(config: &AppConfig) -> Result<(), String> {
+    let results_db = config
+        .results_db
+        .as_deref()
+        .unwrap_or(DEFAULT_RESULTS_DB);
     let mut contents = format!(
-        "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = {}\nmax_depth = {}\nmax_steps = {}\nmax_fresh_terms_per_quantifier = {}\n",
+        "tptp_root = \"{}\"\ndefault_subset_file = \"{}\"\ntimeout_ms = {}\nmax_depth = {}\nmax_steps = {}\nmax_fresh_terms_per_quantifier = {}\nresults_db = \"{}\"\n",
         config.tptp_root.display(),
         config.default_subset_file.display(),
         config
@@ -326,9 +420,17 @@ fn write_config(config: &AppConfig) -> Result<(), String> {
         config
             .max_fresh_terms_per_quantifier
             .unwrap_or(DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER),
+        results_db,
     );
     if let Some(max_biconditionals) = config.max_biconditionals {
         contents.push_str(&format!("max_biconditionals = {max_biconditionals}\n"));
+    }
+    if let Some(engine) = config.engine {
+        let engine_str = match engine {
+            CliSearchEngine::Naive => "naive",
+            CliSearchEngine::Id => "id",
+        };
+        contents.push_str(&format!("engine = \"{engine_str}\"\n"));
     }
 
     fs::write("config.toml", contents).map_err(|err| format!("failed to write config.toml: {err}"))
@@ -337,6 +439,7 @@ fn write_config(config: &AppConfig) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{load_config, validate_and_merge_tptp_config, AppConfig, TptpConfigError};
+    use crate::cli::args::CliSearchEngine;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -353,7 +456,7 @@ mod tests {
         fs::create_dir_all(&temp_dir).expect("temp dir should be created");
         fs::write(
             temp_dir.join("config.toml"),
-            "tptp_root = \"..\\\\TPTP\"\ndefault_subset_file = \"subset.txt\"\ntimeout_ms = 10\nmax_depth = 20\nmax_steps = 30\nmax_fresh_terms_per_quantifier = 2\nmax_biconditionals = 12\n",
+            "tptp_root = \"..\\\\TPTP\"\ndefault_subset_file = \"subset.txt\"\ntimeout_ms = 10\nmax_depth = 20\nmax_steps = 30\nmax_fresh_terms_per_quantifier = 2\nmax_biconditionals = 12\nengine = \"id\"\n",
         )
         .expect("config should be written");
 
@@ -367,7 +470,36 @@ mod tests {
         assert_eq!(config.max_steps, Some(30));
         assert_eq!(config.max_fresh_terms_per_quantifier, Some(2));
         assert_eq!(config.max_biconditionals, Some(12));
+        assert_eq!(config.engine, Some(CliSearchEngine::Id));
         assert_eq!(config.default_subset_file.to_string_lossy(), "subset.txt");
+    }
+
+    #[test]
+    fn load_config_returns_error_for_invalid_engine_value() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "theorem_prover_config_engine_err_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be valid")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        fs::write(
+            temp_dir.join("config.toml"),
+            "tptp_root = \".\"\ndefault_subset_file = \"subset.txt\"\nengine = \"bogus\"\n",
+        )
+        .expect("config should be written");
+
+        let original_dir = std::env::current_dir().expect("cwd should exist");
+        std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
+        let result = load_config();
+        std::env::set_current_dir(original_dir).expect("cwd should be restored");
+
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("bogus"),
+            "error message should mention the invalid value"
+        );
     }
 
     #[test]
@@ -382,6 +514,8 @@ mod tests {
             max_steps: None,
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
+            engine: None,
+            results_db: None,
         };
 
         let result = validate_and_merge_tptp_config(
@@ -406,6 +540,8 @@ mod tests {
             max_steps: None,
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
+            engine: None,
+            results_db: None,
         };
 
         let result = validate_and_merge_tptp_config(None, None, Some(&config));
@@ -440,6 +576,8 @@ mod tests {
             max_steps: None,
             max_fresh_terms_per_quantifier: None,
             max_biconditionals: None,
+            engine: None,
+            results_db: None,
         };
 
         let result = validate_and_merge_tptp_config(Some(&cli_tptp_root), None, Some(&config));
@@ -450,3 +588,7 @@ mod tests {
         assert_eq!(resolved_file, config.default_subset_file);
     }
 }
+
+#[cfg(test)]
+#[path = "config_persist_tests.rs"]
+mod config_persist_tests;

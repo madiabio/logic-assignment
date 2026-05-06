@@ -1,5 +1,31 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+use std::str::FromStr;
+
+/// Controls where proof results are persisted.
+///
+/// The `prove` command persists to SQLite by default. Passing `false`
+/// disables persistence for a single run; any other value is treated as a
+/// database path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PersistOpt {
+    /// Disable persistence for this run.
+    Disabled,
+    /// Persist to the given file path.
+    Path(String),
+}
+
+impl FromStr for PersistOpt {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "false" {
+            Ok(PersistOpt::Disabled)
+        } else {
+            Ok(PersistOpt::Path(s.to_string()))
+        }
+    }
+}
 
 /// Retry/display flags shared across CLI subcommands.
 #[derive(Clone, Args)]
@@ -30,6 +56,29 @@ pub(crate) struct SharedDisplayOptions {
 pub(crate) enum OutputFormat {
     Human,
     Tsv,
+}
+
+/// Proof-search strategy selectable via `--engine` or `engine` in `config.toml`.
+///
+/// The two variants map directly to the library's [`theorem_prover::SearchEngine`]:
+/// - `naive`  → [`theorem_prover::SearchEngine::Naive`]
+/// - `id`     → [`theorem_prover::SearchEngine::IterativeDeepening`]
+///
+/// When the flag is absent from both the command line and `config.toml`, the
+/// prover falls back to [`CliSearchEngine::Naive`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum CliSearchEngine {
+    /// Depth-first backward search.
+    ///
+    /// Explores the proof tree using a single depth-limited DFS pass.
+    /// This is the default strategy.
+    Naive,
+    /// Iterative-deepening backward search.
+    ///
+    /// Repeatedly runs depth-limited DFS with depth limits 1, 2, 3, … up to
+    /// the configured `--max-depth`, returning as soon as a proof is found.
+    /// Guarantees that the shallowest proof is always found first.
+    Id,
 }
 
 /// Top-level CLI options for the theorem prover executable.
@@ -102,6 +151,25 @@ pub(crate) struct ProveCommand {
     /// missing or incomplete, the tool will prompt or exit with an error.
     #[arg(long, value_name = "PATH")]
     pub(crate) subset_file: Option<PathBuf>,
+    /// Proof-search strategy: `naive` for depth-first, `id` for iterative deepening.
+    ///
+    /// When omitted, falls back to the `engine` key in `config.toml`, or `naive`
+    /// if that is also absent.
+    #[arg(long = "engine", value_enum)]
+    pub(crate) engine: Option<CliSearchEngine>,
+    /// SQLite DB location to persist results, or `false` to disable persistence.
+    ///
+    /// Persistence is enabled by default. When omitted, the CLI uses the
+    /// `results_db` setting from `config.toml`, or the built-in default of
+    /// `..\results.db` if the config omits that field.
+    #[arg(long, value_name = "DB_LOCATION|false")]
+    pub(crate) persist: Option<PersistOpt>,
+    /// Human-readable label for this run stored in the DB.
+    ///
+    /// When omitted, a label is generated automatically from the engine name
+    /// and the local timestamp.
+    #[arg(long, value_name = "LABEL")]
+    pub(crate) run_label: Option<String>,
     /// Input `.p` file or directory of `.p` files to prove.
     pub(crate) target: Option<String>,
 }
@@ -152,3 +220,6 @@ impl ParseFailureOptions for RulesCommand {
         self.run.retry_parse_failed
     }
 }
+
+#[cfg(test)]
+mod args_persist_tests;

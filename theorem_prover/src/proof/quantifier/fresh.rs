@@ -25,7 +25,23 @@ pub(crate) fn fresh_eigenconstant_name(sequent: &Sequent) -> String {
     unreachable!("fresh eigenconstant generation should always find a name")
 }
 
-/// Returns a fresh branch term name for term-introducing quantifier steps.
+/// Generates a fresh constant name for use in quantifier instantiation on the current branch.
+///
+/// This is used by term-introducing rules such as `∀L` and `∃R` when a fresh
+/// fallback witness is required. The returned name is guaranteed not to clash
+/// with any symbol already visible in the given [`Sequent`].
+///
+/// Internally, this delegates to [`fresh_name_avoiding_sequent`] using the
+/// prefix `"w"`, which serves as the conventional prefix for fresh branch
+/// terms (witnesses).
+///
+/// # Parameters
+///
+/// - `sequent`: The current sequent whose symbols must be avoided.
+///
+/// # Returns
+///
+/// A fresh symbol name that does not occur anywhere in the sequent.
 pub(crate) fn fresh_branch_term_name(sequent: &Sequent) -> String {
     fresh_name_avoiding_sequent(sequent, "w")
 }

@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod parser;
+pub mod persistence;
 pub mod pipeline;
 pub mod proof;
 

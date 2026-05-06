@@ -2,5 +2,5 @@
 
 /// Attempts to prove a sequent within the supplied proof options.
 pub use crate::proof::search::engine::{
-    ProofOptions, ProofResult, ProofStatus, UnknownReason, prove, prove_with_cancel,
+    ProofOptions, ProofResult, ProofStatus, SearchEngine, UnknownReason, prove, prove_with_cancel,
 };
