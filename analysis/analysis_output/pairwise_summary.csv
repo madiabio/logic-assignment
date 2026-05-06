@@ -1,0 +1,2 @@
+engine_a,engine_b,problems,comparable,a_wins,b_wins,ties,no_data,shared_solved,shared_solved_a_mean,shared_solved_b_mean,shared_solved_delta_mean,shared_solved_ratio_median
+id,naive,368,368,62,130,176,0,139,10.33093525179856,4.64748201438849,-5.683453237410072,0.2

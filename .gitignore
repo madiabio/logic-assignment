@@ -12,3 +12,5 @@ algorithm_2.png
 results.db
 sample_problems/
 
+misc/
+.venv/
