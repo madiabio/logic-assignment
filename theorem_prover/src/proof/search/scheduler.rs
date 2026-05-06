@@ -293,6 +293,181 @@ fn schedule_quantifier_instantiations(
     scheduled
 }
 
+fn schedule_quantifier_visible_terms_only(
+    sequent: &Sequent,
+    state: &BranchState,
+    rule_match: &RuleMatch,
+) -> Vec<ScheduledRule> {
+    let Some(key) = quantified_occurrence_key(sequent, rule_match.side, rule_match.index) else {
+        return Vec::new();
+    };
+    let usage = state.quantifier_usage.get(&key).cloned().unwrap_or_default();
+    let mut scheduled = Vec::new();
+    for term in visible_terms_in_sequent(sequent) {
+        if usage.used_terms.contains(&term) {
+            continue;
+        }
+        scheduled.push(match rule_match.rule {
+            Rule::ForAllL => ScheduledRule::ForAllL {
+                rule_match: *rule_match,
+                term,
+                key: key.clone(),
+                fresh_fallback: false,
+            },
+            Rule::ExistsR => ScheduledRule::ExistsR {
+                rule_match: *rule_match,
+                term,
+                key: key.clone(),
+                fresh_fallback: false,
+            },
+            _ => return Vec::new(),
+        });
+    }
+    scheduled
+}
+
+fn schedule_quantifier_fresh_fallback_only(
+    sequent: &Sequent,
+    state: &BranchState,
+    rule_match: &RuleMatch,
+    max_fresh_terms_per_quantifier: usize,
+) -> Vec<ScheduledRule> {
+    let Some(key) = quantified_occurrence_key(sequent, rule_match.side, rule_match.index) else {
+        return Vec::new();
+    };
+    let usage = state.quantifier_usage.get(&key).cloned().unwrap_or_default();
+    if usage.fresh_terms_used >= max_fresh_terms_per_quantifier {
+        return Vec::new();
+    }
+    let term = Term::Const(crate::ast::Symbol::User(fresh_branch_term_name(sequent)));
+    vec![match rule_match.rule {
+        Rule::ForAllL => ScheduledRule::ForAllL {
+            rule_match: *rule_match,
+            term,
+            key,
+            fresh_fallback: true,
+        },
+        Rule::ExistsR => ScheduledRule::ExistsR {
+            rule_match: *rule_match,
+            term,
+            key,
+            fresh_fallback: true,
+        },
+        _ => return Vec::new(),
+    }]
+}
+
+/// Selects the next batch of proof rules using the LK′ 6-class priority schedule.
+///
+/// Classes (highest to lowest priority):
+///
+/// 1. Closing rules: `Id`, `TopR`, `BottomL`.
+/// 2. Non-branching propositional: `AndL`, `OrR`, `ImpliesR`, `NotL`, `NotR`.
+/// 3. Branching propositional: `AndR`, `OrL`, `ImpliesL`.
+/// 4. Eigenvariable quantifier rules: `ForAllR`, `ExistsL`.
+/// 5. Reusable quantifiers instantiated with unused visible branch terms: `ForAllL`, `ExistsR`.
+/// 6. Reusable quantifiers with a fresh fallback term: `ForAllL`, `ExistsR`.
+///
+/// Only rules from the **first non-empty class** are returned. The key behavioural
+/// differences from [`schedule_next_rules`] are:
+///
+/// - `ForAllR`/`ExistsL` are deprioritised below branching propositional rules.
+/// - Visible-term and fresh-fallback instantiations occupy distinct priority classes,
+///   so visible terms are always exhausted before any fresh term is introduced.
+pub fn schedule_next_rules_lk_priority(
+    sequent: &Sequent,
+    state: &BranchState,
+    max_fresh_terms_per_quantifier: usize,
+) -> ScheduleResult {
+    let rule_matches = find_applicable_rules(sequent);
+
+    // Class 1: closing rules.
+    let mut scheduled = Vec::new();
+    for rule_match in &rule_matches {
+        if matches!(rule_match.rule, Rule::Id | Rule::TopR | Rule::BottomL) {
+            scheduled.push(ScheduledRule::Standard(*rule_match));
+        }
+    }
+    if !scheduled.is_empty() {
+        return ScheduleResult::Rules(scheduled);
+    }
+
+    // Class 2: non-branching propositional (no eigenvariable quantifiers).
+    let mut scheduled = Vec::new();
+    for rule_match in &rule_matches {
+        if matches!(
+            rule_match.rule,
+            Rule::AndL | Rule::OrR | Rule::ImpliesR | Rule::NotL | Rule::NotR
+        ) {
+            scheduled.push(ScheduledRule::Standard(*rule_match));
+        }
+    }
+    if !scheduled.is_empty() {
+        return ScheduleResult::Rules(scheduled);
+    }
+
+    // Class 3: branching propositional.
+    let mut scheduled = Vec::new();
+    for rule_match in &rule_matches {
+        if matches!(rule_match.rule, Rule::AndR | Rule::OrL | Rule::ImpliesL) {
+            scheduled.push(ScheduledRule::Standard(*rule_match));
+        }
+    }
+    if !scheduled.is_empty() {
+        return ScheduleResult::Rules(scheduled);
+    }
+
+    // Class 4: eigenvariable quantifier rules.
+    let mut scheduled = Vec::new();
+    for rule_match in &rule_matches {
+        if matches!(rule_match.rule, Rule::ForAllR | Rule::ExistsL) {
+            scheduled.push(ScheduledRule::Standard(*rule_match));
+        }
+    }
+    if !scheduled.is_empty() {
+        return ScheduleResult::Rules(scheduled);
+    }
+
+    let saw_reusable = rule_matches
+        .iter()
+        .any(|rm| matches!(rm.rule, Rule::ForAllL | Rule::ExistsR));
+
+    if !saw_reusable {
+        return ScheduleResult::NoRules;
+    }
+
+    // Class 5: reusable quantifiers with unused visible branch terms.
+    let mut scheduled = Vec::new();
+    for rule_match in &rule_matches {
+        if !matches!(rule_match.rule, Rule::ForAllL | Rule::ExistsR) {
+            continue;
+        }
+        scheduled.extend(schedule_quantifier_visible_terms_only(sequent, state, rule_match));
+    }
+    if !scheduled.is_empty() {
+        return ScheduleResult::Rules(scheduled);
+    }
+
+    // Class 6: reusable quantifiers with a fresh fallback term.
+    let mut scheduled = Vec::new();
+    for rule_match in &rule_matches {
+        if !matches!(rule_match.rule, Rule::ForAllL | Rule::ExistsR) {
+            continue;
+        }
+        scheduled.extend(schedule_quantifier_fresh_fallback_only(
+            sequent,
+            state,
+            rule_match,
+            max_fresh_terms_per_quantifier,
+        ));
+    }
+    if !scheduled.is_empty() {
+        return ScheduleResult::Rules(scheduled);
+    }
+
+    ScheduleResult::QuantifierExhausted
+}
+
 /// Constructs a stable identifier for a quantified formula occurrence in a sequent.
 ///
 /// This key uniquely identifies a *specific occurrence* of a quantified formula
