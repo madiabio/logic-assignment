@@ -97,6 +97,34 @@ pub(crate) struct CliOptions {
     pub(crate) command: Command,
 }
 
+/// The expected difficulty class of the problem set being proved.
+///
+/// This is stored in the `runs` table and helps categorise benchmark results.
+/// The value is required and must be one of `provable`, `unprovable`, `mixed`,
+/// or `unknown`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum ProblemClass {
+    /// All problems in the run are expected to be provable.
+    Provable,
+    /// All problems in the run are expected to be unprovable.
+    Unprovable,
+    /// The run contains a mix of provable and unprovable problems.
+    Mixed,
+    /// The provability of problems in the run is not known in advance.
+    Unknown,
+}
+
+impl std::fmt::Display for ProblemClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProblemClass::Provable => write!(f, "provable"),
+            ProblemClass::Unprovable => write!(f, "unprovable"),
+            ProblemClass::Mixed => write!(f, "mixed"),
+            ProblemClass::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
 /// Supported top-level commands.
 #[derive(Subcommand)]
 pub(crate) enum Command {
@@ -173,6 +201,12 @@ pub(crate) struct ProveCommand {
     /// and the local timestamp.
     #[arg(long, value_name = "LABEL")]
     pub(crate) run_label: Option<String>,
+    /// Expected difficulty class of the problems in this run.
+    ///
+    /// Stored in the `runs` table to categorise benchmark results. Must be one
+    /// of `provable`, `unprovable`, `mixed`, or `unknown`.
+    #[arg(long, value_enum, value_name = "CLASS", required = true)]
+    pub(crate) problem_class: ProblemClass,
     /// Input `.p` file or directory of `.p` files to prove.
     pub(crate) target: Option<String>,
 }
