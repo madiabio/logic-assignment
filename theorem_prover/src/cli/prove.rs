@@ -79,7 +79,7 @@ pub(crate) fn prove_directory(
     cancellation: &CancellationState,
     settings: &str,
     db_sender: Option<mpsc::Sender<ResultRecord>>,
-) {
+) -> Option<i32> {
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     let mut problem_runs = Vec::new();
     for entry in entries {
@@ -97,7 +97,7 @@ pub(crate) fn prove_directory(
     }
 
     print_prove_preamble(options.format, None, settings);
-    prove_paths(&problem_runs, options, cancellation, db_sender);
+    prove_paths(&problem_runs, options, cancellation, db_sender)
 }
 
 /// Processes many problems through the prover, emits aggregate results, and
@@ -111,7 +111,7 @@ pub(crate) fn prove_paths(
     options: &ProveCommand,
     cancellation: &CancellationState,
     db_sender: Option<mpsc::Sender<ResultRecord>>,
-) {
+) -> Option<i32> {
     let mut summary = ProveBatchSummary::default();
     let total = problem_runs.len();
     for (index, problem_run) in problem_runs.iter().enumerate() {
@@ -144,11 +144,7 @@ pub(crate) fn prove_paths(
         }
     }
 
-    if let Some(code) =
-        prove_batch_exit_code(summary.cancelled, summary.failed_to_process, cancellation)
-    {
-        std::process::exit(code);
-    }
+    prove_batch_exit_code(summary.cancelled, summary.failed_to_process, cancellation)
 }
 
 /// Prints the in-memory `ProveBatchSummary` as the summary section.

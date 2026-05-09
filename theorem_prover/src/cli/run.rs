@@ -125,9 +125,12 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
         let (db_sender, writer_handle) = spawn_db_writer(conn_state);
         let target = Path::new(target);
         if target.is_dir() {
-            prove_directory(target, options, &cancellation, &settings, db_sender);
+            let exit_code = prove_directory(target, options, &cancellation, &settings, db_sender);
             if let Some(handle) = writer_handle {
                 handle.join().ok();
+            }
+            if let Some(code) = exit_code {
+                std::process::exit(code);
             }
         } else {
             print_prove_preamble(options.format, None, &settings);
@@ -162,9 +165,12 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let (db_sender, writer_handle) = spawn_db_writer(conn_state);
     let targets = resolve_subset_targets_with_paths(&tptp_root, &subset_file);
     print_prove_preamble(options.format, Some(targets.len()), &settings);
-    prove_paths(&targets, options, &cancellation, db_sender);
+    let exit_code = prove_paths(&targets, options, &cancellation, db_sender);
     if let Some(handle) = writer_handle {
         handle.join().ok();
+    }
+    if let Some(code) = exit_code {
+        std::process::exit(code);
     }
 }
 
