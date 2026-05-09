@@ -207,6 +207,8 @@ fn cli_engine_to_search_engine(engine: CliSearchEngine) -> SearchEngine {
     match engine {
         CliSearchEngine::Naive => SearchEngine::Naive,
         CliSearchEngine::Id => SearchEngine::IterativeDeepening,
+        CliSearchEngine::Priority => SearchEngine::Priority,
+        CliSearchEngine::PriorityId => SearchEngine::PriorityId,
     }
 }
 
@@ -291,9 +293,11 @@ pub(crate) fn load_config() -> Result<AppConfig, String> {
                 engine = Some(match value {
                     "naive" => CliSearchEngine::Naive,
                     "id" => CliSearchEngine::Id,
+                    "priority" => CliSearchEngine::Priority,
+                    "priority-id" => CliSearchEngine::PriorityId,
                     other => {
                         return Err(format!(
-                            "invalid engine in config.toml: '{other}', expected 'naive' or 'id'"
+                            "invalid engine in config.toml: '{other}', expected 'naive', 'id', 'priority', or 'priority-id'"
                         ))
                     }
                 });
@@ -429,6 +433,8 @@ fn write_config(config: &AppConfig) -> Result<(), String> {
         let engine_str = match engine {
             CliSearchEngine::Naive => "naive",
             CliSearchEngine::Id => "id",
+            CliSearchEngine::Priority => "priority",
+            CliSearchEngine::PriorityId => "priority-id",
         };
         contents.push_str(&format!("engine = \"{engine_str}\"\n"));
     }
@@ -443,6 +449,8 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn load_config_parses_expected_fields() {
@@ -461,6 +469,7 @@ mod tests {
         .expect("config should be written");
 
         let original_dir = std::env::current_dir().expect("cwd should exist");
+        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
         let config = load_config().expect("config should parse");
         std::env::set_current_dir(original_dir).expect("cwd should be restored");
@@ -491,6 +500,7 @@ mod tests {
         .expect("config should be written");
 
         let original_dir = std::env::current_dir().expect("cwd should exist");
+        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
         let result = load_config();
         std::env::set_current_dir(original_dir).expect("cwd should be restored");
@@ -586,6 +596,56 @@ mod tests {
         let (resolved_root, resolved_file) = result.unwrap();
         assert_eq!(resolved_root, cli_tptp_root);
         assert_eq!(resolved_file, config.default_subset_file);
+    }
+
+    #[test]
+    fn load_config_parses_priority_engine() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "theorem_prover_config_priority_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be valid")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        fs::write(
+            temp_dir.join("config.toml"),
+            "tptp_root = \".\"\ndefault_subset_file = \"subset.txt\"\nengine = \"priority\"\n",
+        )
+        .expect("config should be written");
+
+        let original_dir = std::env::current_dir().expect("cwd should exist");
+        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
+        let config = load_config().expect("priority engine should parse");
+        std::env::set_current_dir(original_dir).expect("cwd should be restored");
+
+        assert_eq!(config.engine, Some(CliSearchEngine::Priority));
+    }
+
+    #[test]
+    fn load_config_parses_priority_id_engine() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "theorem_prover_config_priority_id_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be valid")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp dir should be created");
+        fs::write(
+            temp_dir.join("config.toml"),
+            "tptp_root = \".\"\ndefault_subset_file = \"subset.txt\"\nengine = \"priority-id\"\n",
+        )
+        .expect("config should be written");
+
+        let original_dir = std::env::current_dir().expect("cwd should exist");
+        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
+        let config = load_config().expect("priority-id engine should parse");
+        std::env::set_current_dir(original_dir).expect("cwd should be restored");
+
+        assert_eq!(config.engine, Some(CliSearchEngine::PriorityId));
     }
 }
 

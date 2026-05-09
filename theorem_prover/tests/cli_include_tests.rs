@@ -44,6 +44,7 @@ fof(ax_1,axiom,p).
         .current_dir(&dir)
         .args([
             "prove",
+            "--problem-class", "provable",
             problem_path.to_str().expect("path should be utf-8"),
         ])
         .output()
@@ -92,7 +93,7 @@ fof(con,conjecture,p).
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove", dir.to_str().expect("path should be utf-8")])
+        .args(["prove", "--problem-class", "provable", dir.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 

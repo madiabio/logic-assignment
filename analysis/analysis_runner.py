@@ -1,193 +1,203 @@
+"""
+analysis_runner.py — CLI entrypoint for the full analysis pipeline.
+
+Usage
+-----
+    python analysis/analysis_runner.py --problem-class provable [--db results.db]
+        [--output analysis/output] [--ratings subset_descriptions/medium_problems.txt]
+"""
+
 from __future__ import annotations
 
-import math
+import argparse
+import sys
+from pathlib import Path
 
-import pandas as pd
+# ---------------------------------------------------------------------------
+# Path helpers — locate defaults relative to this script
+# ---------------------------------------------------------------------------
 
-from analysis_core import (
-    build_comparison_table,
-    compare_pair,
-    classify_status,
-    classify_unknown_reason,
-    ensure_output_dir,
-    load_database,
-    pick_representative_runs,
-    resolve_db_path,
-    UNKNOWN_REASON_ORDER,
-    summarize_engine,
-)
-from analysis_plots import save_bar_chart, save_boxplot, save_heatmap, save_histogram
-from analysis_report import write_report
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _SCRIPT_DIR.parent
+
+
+def _resolve_db(db_arg: str | None) -> Path:
+    """Return the path to results.db, searching script dir then parent dir."""
+    if db_arg is not None:
+        return Path(db_arg).resolve()
+    for candidate in [_SCRIPT_DIR / "results.db", _REPO_ROOT / "results.db"]:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        "Could not find results.db in the script directory or its parent. "
+        "Pass --db explicitly."
+    )
+
+
+def _resolve_ratings(ratings_arg: str | None) -> Path:
+    """Return the path to the TPTP ratings file."""
+    if ratings_arg is not None:
+        return Path(ratings_arg).resolve()
+    default = _REPO_ROOT / "subset_descriptions" / "medium_problems.txt"
+    return default
+
+
+def _resolve_output(output_arg: str | None) -> Path:
+    """Return the base output directory."""
+    if output_arg is not None:
+        return Path(output_arg).resolve()
+    return _SCRIPT_DIR / "output"
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    out_dir = ensure_output_dir()
-    data_path = resolve_db_path()
-    runs, results, conn = load_database()
+    parser = argparse.ArgumentParser(
+        description="Run the full benchmark analysis pipeline for a problem class."
+    )
+    parser.add_argument(
+        "--problem-class",
+        required=True,
+        choices=["provable", "unprovable", "mixed", "unknown"],
+        help="Problem class to analyse.",
+    )
+    parser.add_argument(
+        "--db",
+        default=None,
+        metavar="PATH",
+        help="Path to results.db (default: auto-detect in script dir or parent).",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        metavar="DIR",
+        help="Base output directory (default: analysis/output relative to script dir).",
+    )
+    parser.add_argument(
+        "--ratings",
+        default=None,
+        metavar="PATH",
+        help="Path to TPTP ratings txt file (default: subset_descriptions/medium_problems.txt).",
+    )
+    args = parser.parse_args()
 
-    try:
-        selected_runs = pick_representative_runs(runs, results)
-        comparison_table = build_comparison_table(results, selected_runs)
+    problem_class: str = args.problem_class
 
-        engine_summary = pd.DataFrame([summarize_engine(comparison_table, engine) for engine in selected_runs["engine"]])
+    # --- Resolve paths ---
+    db_path = _resolve_db(args.db)
+    ratings_path = _resolve_ratings(args.ratings)
+    output_base = _resolve_output(args.output)
 
-        unknown_reason_rows = []
-        for engine in selected_runs["engine"]:
-            unknown_mask = comparison_table[f"{engine}__status"].map(classify_status) == "unknown"
-            reason_counts = (
-                comparison_table.loc[unknown_mask, f"{engine}__unknown_reason"]
-                .map(classify_unknown_reason)
-                .value_counts()
-                .reindex(UNKNOWN_REASON_ORDER, fill_value=0)
-            )
-            unknown_reason_rows.append({"engine": engine, **reason_counts.to_dict()})
-        unknown_reason_summary = pd.DataFrame(unknown_reason_rows)
+    print(f"Database : {db_path}")
+    print(f"Ratings  : {ratings_path}")
+    print(f"Output   : {output_base / problem_class}")
+    print()
 
-        pairwise_rows = []
-        pair_tables: dict[tuple[str, str], pd.DataFrame] = {}
-        engines = selected_runs["engine"].tolist()
-        for i, engine_a in enumerate(engines):
-            for engine_b in engines[i + 1 :]:
-                metrics, pair_df = compare_pair(comparison_table, engine_a, engine_b)
-                pairwise_rows.append(metrics)
-                pair_tables[(engine_a, engine_b)] = pair_df
+    # --- Ensure the script's own directory is importable ---
+    script_dir_str = str(_SCRIPT_DIR)
+    if script_dir_str not in sys.path:
+        sys.path.insert(0, script_dir_str)
 
-        pairwise_summary = pd.DataFrame(pairwise_rows)
+    # --- Lazy import so that path resolution errors surface first ---
+    from analysis_core import (
+        build_engine_results,
+        load_database,
+        load_tptp_ratings,
+        select_runs,
+    )
+    from analysis_plots import (
+        plot_outcome_composition,
+        plot_solve_rate_by_atom_bin,
+        plot_solve_rate_by_difficulty_bin,
+        plot_solve_time_cdf,
+    )
 
-        selected_runs_out = selected_runs[
-            ["engine", "run_id", "label", "timestamp", "problem_coverage", "row_count"]
-        ].rename(columns={"problem_coverage": "problems"})
-        selected_runs_out.to_csv(out_dir / "selected_runs.csv", index=False)
-        engine_summary.to_csv(out_dir / "engine_summary.csv", index=False)
-        unknown_reason_summary.to_csv(out_dir / "unknown_reason_summary.csv", index=False)
-        pairwise_summary.to_csv(out_dir / "pairwise_summary.csv", index=False)
-        comparison_table.reset_index().to_csv(out_dir / "problem_comparison.csv", index=False)
+    # 1. Load database
+    runs_df, results_df = load_database(db_path)
 
-        plot_order = selected_runs["engine"].tolist()
-        engine_summary_plot = engine_summary.set_index("engine").loc[plot_order]
+    # 2. Select runs
+    selected_runs = select_runs(runs_df, results_df, problem_class)
+    runs_summary = ", ".join(f"{e}={rid}" for e, rid in selected_runs.items())
+    print(f"Selected runs: {runs_summary}")
+    print()
 
-        save_bar_chart(
-            (engine_summary_plot["solve_rate"] * 100).to_frame("solve_rate_pct"),
-            out_dir / "solve_rate.png",
-            "Solved Rate by Engine",
-            "Solved rate (%)",
-            stacked=False,
-        )
-
-        save_bar_chart(
-            engine_summary_plot[["solved", "timeout", "unknown", "other", "no_data"]],
-            out_dir / "outcome_composition.png",
-            "Outcome Composition by Engine",
-            "Problems",
-            stacked=True,
-        )
-
-        if unknown_reason_summary[UNKNOWN_REASON_ORDER[:-1]].to_numpy().sum() > 0:
-            save_bar_chart(
-                unknown_reason_summary.set_index("engine")[UNKNOWN_REASON_ORDER[:-1]],
-                out_dir / "unknown_reason_composition.png",
-                "Unknown Reasons by Engine",
-                "Unknown cases",
-                stacked=True,
-            )
-
-        solved_times = pd.DataFrame(
-            {
-                engine: comparison_table.loc[
-                    comparison_table[f"{engine}__status"].map(lambda value: classify_status(value) == "solved"),
-                    f"{engine}__elapsed_ms",
-                ]
-                .astype(float)
-                .rename(engine)
-                for engine in plot_order
-            }
-        )
-        save_boxplot(
-            solved_times,
-            out_dir / "elapsed_distribution.png",
-            "Solved-Case Elapsed Time Distribution",
-            "Elapsed time (ms, log scale)",
-        )
-
-        if not pairwise_summary.empty:
-            pairwise_matrix = pd.DataFrame(index=plot_order, columns=plot_order, dtype=float)
-            pairwise_labels = pd.DataFrame(index=plot_order, columns=plot_order, dtype=object)
-            for (engine_a, engine_b), pair_df in pair_tables.items():
-                comparable = int((pair_df["outcome"] != "no_data").sum())
-                a_wins = int((pair_df["outcome"] == "a_wins").sum())
-                b_wins = int((pair_df["outcome"] == "b_wins").sum())
-                share_ab = a_wins / comparable if comparable else float("nan")
-                share_ba = b_wins / comparable if comparable else float("nan")
-                pairwise_matrix.loc[engine_a, engine_b] = share_ab
-                pairwise_matrix.loc[engine_b, engine_a] = share_ba
-                pairwise_labels.loc[engine_a, engine_b] = f"{a_wins}/{comparable}"
-                pairwise_labels.loc[engine_b, engine_a] = f"{b_wins}/{comparable}"
-            for engine in plot_order:
-                pairwise_matrix.loc[engine, engine] = 0.5
-                pairwise_labels.loc[engine, engine] = "self"
-            save_heatmap(
-                pairwise_matrix,
-                out_dir / "pairwise_win_rate.png",
-                "Pairwise Win Share",
-                annotation=pairwise_labels,
-            )
-
-            for (engine_a, engine_b), pair_df in pair_tables.items():
-                shared = pair_df[
-                    (pair_df[f"{engine_a}_status"] == "solved")
-                    & (pair_df[f"{engine_b}_status"] == "solved")
-                    & pair_df["ratio_b_over_a"].notna()
-                ]
-                if shared.empty:
-                    continue
-                save_histogram(
-                    pd.Series([math.log2(x) for x in shared["ratio_b_over_a"].to_numpy() if x > 0]),
-                    out_dir / f"paired_speed_ratio_{engine_a}_vs_{engine_b}.png",
-                    f"Paired Speed Ratio: {engine_b} vs {engine_a}",
-                    "log2(elapsed_b / elapsed_a)",
-                )
-
-        report_path = write_report(
-            out_dir,
-            selected_runs,
-            engine_summary,
-            unknown_reason_summary,
-            pairwise_summary,
-            comparison_table,
-            pair_tables,
-        )
-
-        print(f"Using database: {data_path}")
-        print(f"Output directory: {out_dir}")
-        print(f"Report written to: {report_path}")
-        print()
-        print("Selected runs:")
-        print(selected_runs_out.to_string(index=False))
-        print()
-        print("Engine summary:")
+    # 3. Load TPTP ratings
+    tptp_ratings: dict[str, float] = {}
+    if ratings_path.exists():
+        tptp_ratings = load_tptp_ratings(ratings_path)
+    else:
         print(
-            engine_summary[
-                [
-                    "engine",
-                    "problems",
-                    "solved",
-                    "timeout",
-                    "unknown",
-                    "other",
-                    "no_data",
-                    "solve_rate",
-                    "mean_elapsed_ms_solved",
-                    "median_elapsed_ms_solved",
-                ]
-            ].to_string(index=False)
+            f"Warning: ratings file not found at {ratings_path}; "
+            "solve-rate-by-difficulty plot will be skipped.",
+            file=sys.stderr,
         )
-        if not unknown_reason_summary.empty:
-            print()
-            print("Unknown reason summary:")
-            print(unknown_reason_summary.to_string(index=False))
-        if not pairwise_summary.empty:
-            print()
-            print("Pairwise summary:")
-            print(pairwise_summary.to_string(index=False))
-    finally:
-        conn.close()
+
+    # 4. Build engine results
+    engine_results = build_engine_results(runs_df, results_df, selected_runs)
+
+    # 5. Get shared timeout_ms from the first selected run
+    first_run_id = list(selected_runs.values())[0]
+    timeout_ms = int(
+        runs_df.loc[runs_df["run_id"] == first_run_id, "timeout_ms"].iloc[0]
+    )
+
+    # 6. Create output directory: <output_base>/<problem_class>/
+    outdir = output_base / problem_class
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # 7. Generate and save four PDFs
+    plot_outcome_composition(engine_results, outdir / "outcome_composition.pdf")
+    print(f"Saved: {outdir / 'outcome_composition.pdf'}")
+
+    plot_solve_time_cdf(engine_results, timeout_ms, outdir / "solve_time_cdf.pdf")
+    print(f"Saved: {outdir / 'solve_time_cdf.pdf'}")
+
+    plot_solve_rate_by_atom_bin(engine_results, outdir / "solve_rate_by_atoms.pdf")
+    print(f"Saved: {outdir / 'solve_rate_by_atoms.pdf'}")
+
+    plot_solve_rate_by_difficulty_bin(
+        engine_results, tptp_ratings, outdir / "solve_rate_by_difficulty.pdf"
+    )
+    print(f"Saved: {outdir / 'solve_rate_by_difficulty.pdf'}")
+    print()
+
+    # 8. Print summary table
+    _print_summary(engine_results, results_df, selected_runs, problem_class)
+
+
+def _print_summary(
+    engine_results,
+    results_df,
+    selected_runs: dict[str, int],
+    problem_class: str,
+) -> None:
+    """Print a summary table to stdout."""
+    import pandas as pd
+
+    runs_summary = ", ".join(f"{e}={rid}" for e, rid in selected_runs.items())
+    print(f"=== Analysis: {problem_class} (runs: {runs_summary}) ===")
+    print()
+
+    header = f"{'Engine':<14} {'Run':>4}  {'Total':>6}  {'Solved':>6}  {'Timeout':>8}  {'max_steps':>10}  {'max_bicond':>11}  {'max_depth':>10}"
+    print(header)
+
+    for engine, run_id in selected_runs.items():
+        edf = engine_results[engine_results["engine"] == engine]
+        total = len(edf)
+        solved = int((edf["outcome"] == "solved").sum())
+        timeout = int((edf["outcome"] == "timeout").sum())
+        max_steps = int((edf["outcome"] == "max_steps").sum())
+        max_bicond = int((edf["outcome"] == "max_biconditionals").sum())
+        max_depth = int((edf["outcome"] == "max_depth").sum())
+
+        print(
+            f"{engine:<14} {run_id:>4}  {total:>6}  {solved:>6}  {timeout:>8}  "
+            f"{max_steps:>10}  {max_bicond:>11}  {max_depth:>10}"
+        )
+
+
+if __name__ == "__main__":
+    main()

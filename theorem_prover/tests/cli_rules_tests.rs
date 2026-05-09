@@ -90,7 +90,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove"])
+        .args(["prove", "--problem-class", "provable"])
         .output()
         .expect("binary should run");
 
@@ -159,7 +159,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove", "--format", "tsv"])
+        .args(["prove", "--problem-class", "provable", "--format", "tsv"])
         .output()
         .expect("binary should run");
 
@@ -220,7 +220,7 @@ LCL662+1.001        FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove"])
+        .args(["prove", "--problem-class", "provable"])
         .output()
         .expect("binary should run");
 
@@ -378,7 +378,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove"])
+        .args(["prove", "--problem-class", "provable"])
         .output()
         .expect("binary should run");
 
@@ -420,7 +420,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove", "--max-steps", "10"])
+        .args(["prove", "--problem-class", "provable", "--max-steps", "10"])
         .output()
         .expect("binary should run");
 
@@ -452,7 +452,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = run_with_stdin(
         &dir,
-        &["prove"],
+        &["prove", "--problem-class", "provable"],
         &format!(
             "{}\n{}\n1000\n50\n50\n1\n",
             tptp_root.display(),
@@ -486,7 +486,7 @@ max_fresh_terms_per_quantifier =
 "#;
     write_file(&config_path, original_config);
 
-    let output = run_with_stdin(&dir, &["prove"], "n\n");
+    let output = run_with_stdin(&dir, &["prove", "--problem-class", "provable"], "n\n");
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -537,7 +537,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = run_with_stdin(
         &dir,
-        &["prove"],
+        &["prove", "--problem-class", "provable"],
         &format!(
             "y\n{}\n{}\n1000\n50\n50\n1\n",
             tptp_root.display(),
@@ -664,7 +664,7 @@ fof(conj_1,conjecture,p).
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["prove", input.to_str().expect("path should be utf-8")])
+        .args(["prove", "--problem-class", "provable", input.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 
@@ -694,6 +694,7 @@ fof(conj_1,conjecture,p).
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args([
             "prove",
+            "--problem-class", "provable",
             "--show-sequent",
             input.to_str().expect("path should be utf-8"),
         ])
@@ -1088,6 +1089,7 @@ fof(conj_1,conjecture,p).
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args([
             "prove",
+            "--problem-class", "provable",
             "--max-steps",
             "0",
             input.to_str().expect("path should be utf-8"),
@@ -1129,7 +1131,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove"])
+        .args(["prove", "--problem-class", "provable"])
         .output()
         .expect("binary should run");
 
@@ -1157,6 +1159,7 @@ fof(conj_1,conjecture,p).
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .args([
             "prove",
+            "--problem-class", "provable",
             "--format",
             "tsv",
             "--max-steps",
@@ -1211,7 +1214,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove"])
+        .args(["prove", "--problem-class", "provable"])
         .output()
         .expect("binary should run");
 
@@ -1257,7 +1260,7 @@ SYN001+1            FOF THM   0.00 FOF_THM_PRP                  1      1      0 
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
         .current_dir(&dir)
-        .args(["prove", "--max-fresh-terms-per-quantifier", "1"])
+        .args(["prove", "--problem-class", "provable", "--max-fresh-terms-per-quantifier", "1"])
         .output()
         .expect("binary should run");
 
@@ -1412,7 +1415,7 @@ fof(ax_1,axiom,p)
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["prove", dir.to_str().expect("path should be utf-8")])
+        .args(["prove", "--problem-class", "provable", dir.to_str().expect("path should be utf-8")])
         .output()
         .expect("binary should run");
 

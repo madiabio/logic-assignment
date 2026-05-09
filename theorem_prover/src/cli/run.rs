@@ -283,6 +283,8 @@ fn build_run_record(options: &ProveCommand, proof_options: &ProofOptions) -> Run
         .clone()
         .unwrap_or_else(|| default_run_label(proof_options.engine, &label_stamp));
 
+    let problem_class = options.problem_class.to_string();
+
     RunRecord {
         label,
         timestamp,
@@ -291,6 +293,7 @@ fn build_run_record(options: &ProveCommand, proof_options: &ProofOptions) -> Run
         max_depth: proof_options.max_depth as u32,
         max_steps: proof_options.max_steps as u64,
         max_fresh_terms_per_quantifier: proof_options.max_fresh_terms_per_quantifier as u32,
+        problem_class,
     }
 }
 
@@ -304,5 +307,7 @@ fn engine_name(engine: SearchEngine) -> &'static str {
     match engine {
         SearchEngine::Naive => "naive",
         SearchEngine::IterativeDeepening => "id",
+        SearchEngine::Priority => "priority",
+        SearchEngine::PriorityId => "priority-id",
     }
 }

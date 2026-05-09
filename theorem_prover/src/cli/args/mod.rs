@@ -60,25 +60,28 @@ pub(crate) enum OutputFormat {
 
 /// Proof-search strategy selectable via `--engine` or `engine` in `config.toml`.
 ///
-/// The two variants map directly to the library's [`theorem_prover::SearchEngine`]:
-/// - `naive`  → [`theorem_prover::SearchEngine::Naive`]
-/// - `id`     → [`theorem_prover::SearchEngine::IterativeDeepening`]
+/// Variants map to [`theorem_prover::SearchEngine`]:
+/// - `naive`        → [`theorem_prover::SearchEngine::Naive`]
+/// - `id`           → [`theorem_prover::SearchEngine::IterativeDeepening`]
+/// - `priority`     → [`theorem_prover::SearchEngine::Priority`]
+/// - `priority-id`  → [`theorem_prover::SearchEngine::PriorityId`]
 ///
 /// When the flag is absent from both the command line and `config.toml`, the
 /// prover falls back to [`CliSearchEngine::Naive`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub(crate) enum CliSearchEngine {
-    /// Depth-first backward search.
-    ///
-    /// Explores the proof tree using a single depth-limited DFS pass.
-    /// This is the default strategy.
+    /// Depth-first backward search. This is the default strategy.
     Naive,
     /// Iterative-deepening backward search.
     ///
     /// Repeatedly runs depth-limited DFS with depth limits 1, 2, 3, … up to
     /// the configured `--max-depth`, returning as soon as a proof is found.
-    /// Guarantees that the shallowest proof is always found first.
     Id,
+    /// Depth-first backward search with the LK′ 6-class priority scheduler.
+    Priority,
+    /// Iterative-deepening backward search with the LK′ 6-class priority scheduler.
+    #[value(name = "priority-id")]
+    PriorityId,
 }
 
 /// Top-level CLI options for the theorem prover executable.
@@ -92,6 +95,34 @@ pub(crate) enum CliSearchEngine {
 pub(crate) struct CliOptions {
     #[command(subcommand)]
     pub(crate) command: Command,
+}
+
+/// The expected difficulty class of the problem set being proved.
+///
+/// This is stored in the `runs` table and helps categorise benchmark results.
+/// The value is required and must be one of `provable`, `unprovable`, `mixed`,
+/// or `unknown`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum ProblemClass {
+    /// All problems in the run are expected to be provable.
+    Provable,
+    /// All problems in the run are expected to be unprovable.
+    Unprovable,
+    /// The run contains a mix of provable and unprovable problems.
+    Mixed,
+    /// The provability of problems in the run is not known in advance.
+    Unknown,
+}
+
+impl std::fmt::Display for ProblemClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProblemClass::Provable => write!(f, "provable"),
+            ProblemClass::Unprovable => write!(f, "unprovable"),
+            ProblemClass::Mixed => write!(f, "mixed"),
+            ProblemClass::Unknown => write!(f, "unknown"),
+        }
+    }
 }
 
 /// Supported top-level commands.
@@ -170,6 +201,12 @@ pub(crate) struct ProveCommand {
     /// and the local timestamp.
     #[arg(long, value_name = "LABEL")]
     pub(crate) run_label: Option<String>,
+    /// Expected difficulty class of the problems in this run.
+    ///
+    /// Stored in the `runs` table to categorise benchmark results. Must be one
+    /// of `provable`, `unprovable`, `mixed`, or `unknown`.
+    #[arg(long, value_enum, value_name = "CLASS", required = true)]
+    pub(crate) problem_class: ProblemClass,
     /// Input `.p` file or directory of `.p` files to prove.
     pub(crate) target: Option<String>,
 }

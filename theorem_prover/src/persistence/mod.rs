@@ -23,6 +23,8 @@ pub struct RunRecord {
     pub max_steps: u64,
     /// Maximum number of fresh terms introduced per quantifier.
     pub max_fresh_terms_per_quantifier: u32,
+    /// Expected difficulty class of the problem set (e.g. "provable", "mixed").
+    pub problem_class: String,
 }
 
 /// Result for a single problem in a batch.
@@ -48,7 +50,8 @@ pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
     Connection::open(path)
 }
 
-/// Create the `runs` and `results` tables if they do not already exist.
+/// Create the `runs` and `results` tables if they do not already exist,
+/// and migrate any pre-existing `runs` table to include `problem_class`.
 pub fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS runs (
@@ -59,7 +62,8 @@ pub fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
             timeout_ms              INTEGER NOT NULL,
             max_depth               INTEGER NOT NULL,
             max_steps               INTEGER NOT NULL,
-            max_fresh_terms_per_quantifier INTEGER NOT NULL
+            max_fresh_terms_per_quantifier INTEGER NOT NULL,
+            problem_class           TEXT    NOT NULL DEFAULT 'unknown'
         );
 
         CREATE TABLE IF NOT EXISTS results (
@@ -73,14 +77,27 @@ pub fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
             atoms       INTEGER,
             unknown_reason TEXT
         );",
-    )
+    )?;
+
+    // Migrate pre-existing `runs` tables that predate the problem_class column.
+    let has_column: bool = conn
+        .prepare("PRAGMA table_info(runs)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .any(|name| name.as_deref() == Ok("problem_class"));
+    if !has_column {
+        conn.execute_batch(
+            "ALTER TABLE runs ADD COLUMN problem_class TEXT NOT NULL DEFAULT 'unknown';",
+        )?;
+    }
+
+    Ok(())
 }
 
 /// Insert a run record and return its run_id.
 pub fn insert_run(conn: &Connection, run: &RunRecord) -> rusqlite::Result<i64> {
     conn.execute(
-        "INSERT INTO runs (label, timestamp, engine, timeout_ms, max_depth, max_steps, max_fresh_terms_per_quantifier)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO runs (label, timestamp, engine, timeout_ms, max_depth, max_steps, max_fresh_terms_per_quantifier, problem_class)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             run.label,
             run.timestamp,
@@ -89,6 +106,7 @@ pub fn insert_run(conn: &Connection, run: &RunRecord) -> rusqlite::Result<i64> {
             run.max_depth,
             run.max_steps as i64,
             run.max_fresh_terms_per_quantifier,
+            run.problem_class,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -151,6 +169,7 @@ mod tests {
             max_depth: 10,
             max_steps: 1000,
             max_fresh_terms_per_quantifier: 3,
+            problem_class: "mixed".to_string(),
         }
     }
 
@@ -220,16 +239,17 @@ mod tests {
             max_depth: 20,
             max_steps: 5000,
             max_fresh_terms_per_quantifier: 7,
+            problem_class: "provable".to_string(),
         };
         let id = insert_run(&conn, &run).unwrap();
 
-        let (label, timestamp, engine, timeout_ms, max_depth, max_steps, mft): (
-            String, String, String, i64, i64, i64, i64,
+        let (label, timestamp, engine, timeout_ms, max_depth, max_steps, mft, problem_class): (
+            String, String, String, i64, i64, i64, i64, String,
         ) = conn
             .query_row(
-                "SELECT label, timestamp, engine, timeout_ms, max_depth, max_steps, max_fresh_terms_per_quantifier FROM runs WHERE run_id = ?1",
+                "SELECT label, timestamp, engine, timeout_ms, max_depth, max_steps, max_fresh_terms_per_quantifier, problem_class FROM runs WHERE run_id = ?1",
                 params![id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
             )
             .unwrap();
 
@@ -240,6 +260,7 @@ mod tests {
         assert_eq!(max_depth, 20);
         assert_eq!(max_steps, 5000);
         assert_eq!(mft, 7);
+        assert_eq!(problem_class, "provable");
     }
 
     #[test]
