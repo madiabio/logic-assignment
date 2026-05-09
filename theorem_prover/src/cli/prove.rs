@@ -44,7 +44,6 @@ pub(crate) struct ProveBatchSummary {
     not_implemented: usize,
     error: usize,
     failed_to_process: usize,
-    interrupted_problem: Option<String>,
     failed_files: Vec<PathBuf>,
 }
 
@@ -59,7 +58,6 @@ impl ProveBatchSummary {
             ProveFileResult::Status(ProofStatus::Unknown, _) => self.unknown += 1,
             ProveFileResult::Status(ProofStatus::Cancelled, _) => {
                 self.cancelled += 1;
-                self.interrupted_problem = Some(problem_run.problem_id());
             }
             ProveFileResult::Status(ProofStatus::NotImplemented, _) => {
                 self.not_implemented += 1;
@@ -117,10 +115,6 @@ pub(crate) fn prove_paths(
     let mut summary = ProveBatchSummary::default();
     let total = problem_runs.len();
     for (index, problem_run) in problem_runs.iter().enumerate() {
-        if cancellation.is_requested() {
-            break;
-        }
-
         if should_skip_parse_failed_file(&problem_run.path, options) {
             summary.skipped += 1;
             continue;
@@ -138,10 +132,6 @@ pub(crate) fn prove_paths(
                     );
                 }
             }
-        }
-
-        if matches!(result, ProveFileResult::Status(ProofStatus::Cancelled, _)) {
-            break;
         }
     }
 
@@ -165,15 +155,13 @@ pub(crate) fn prove_paths(
                             ("error", get("error")),
                             ("failed_to_process", summary.failed_to_process.to_string()),
                         ]);
-                        if let Some(problem_id) = &summary.interrupted_problem {
-                            eprintln!("Cancelled while proving {problem_id}");
-                        } else if cancellation.is_requested() {
-                            eprintln!("Cancelled before starting the next problem");
+                        if cancellation.is_requested() {
+                            eprintln!("Cancelled.");
                         }
                     }
                     OutputFormat::Tsv => {
                         println!(
-                            "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                            "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                             summary.processed,
                             summary.skipped,
                             get("provable"),
@@ -183,8 +171,7 @@ pub(crate) fn prove_paths(
                             get("cancelled"),
                             get("not_implemented"),
                             get("error"),
-                            summary.failed_to_process,
-                            summary.interrupted_problem.as_deref().unwrap_or_default()
+                            summary.failed_to_process
                         );
                     }
                 }
@@ -235,15 +222,13 @@ fn print_in_memory_summary(
                 ("error", summary.error.to_string()),
                 ("failed_to_process", summary.failed_to_process.to_string()),
             ]);
-            if let Some(problem_id) = &summary.interrupted_problem {
-                eprintln!("Cancelled while proving {problem_id}");
-            } else if cancellation.is_requested() {
-                eprintln!("Cancelled before starting the next problem");
+            if cancellation.is_requested() {
+                eprintln!("Cancelled.");
             }
         }
         OutputFormat::Tsv => {
             println!(
-                "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 summary.processed,
                 summary.skipped,
                 summary.provable,
@@ -253,8 +238,7 @@ fn print_in_memory_summary(
                 summary.cancelled,
                 summary.not_implemented,
                 summary.error,
-                summary.failed_to_process,
-                summary.interrupted_problem.as_deref().unwrap_or_default()
+                summary.failed_to_process
             );
         }
     }
