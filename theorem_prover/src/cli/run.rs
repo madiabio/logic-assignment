@@ -126,8 +126,11 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
         let target = Path::new(target);
         if target.is_dir() {
             let exit_code = prove_directory(target, options, &cancellation, &settings, db_sender);
+            // db_sender consumed by prove_directory — channel closed, writer thread will drain and exit
             if let Some(handle) = writer_handle {
-                handle.join().ok();
+                if let Err(panic) = handle.join() {
+                    eprintln!("warning: DB writer thread panicked: {:?}", panic);
+                }
             }
             if let Some(code) = exit_code {
                 std::process::exit(code);
@@ -151,7 +154,9 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
             }
             drop(db_sender);
             if let Some(handle) = writer_handle {
-                handle.join().ok();
+                if let Err(panic) = handle.join() {
+                    eprintln!("warning: DB writer thread panicked: {:?}", panic);
+                }
             }
             report_single_prove_file(result);
         }
@@ -167,7 +172,9 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
     print_prove_preamble(options.format, Some(targets.len()), &settings);
     let exit_code = prove_paths(&targets, options, &cancellation, db_sender);
     if let Some(handle) = writer_handle {
-        handle.join().ok();
+        if let Err(panic) = handle.join() {
+            eprintln!("warning: DB writer thread panicked: {:?}", panic);
+        }
     }
     if let Some(code) = exit_code {
         std::process::exit(code);
