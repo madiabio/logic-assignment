@@ -115,18 +115,34 @@ pub(crate) fn prove_paths(
     db_sender: Option<mpsc::Sender<ResultRecord>>,
 ) -> Option<i32> {
     let total = problem_runs.len();
-    let skipped_count = problem_runs
-        .iter()
-        .filter(|pr| should_skip_parse_failed_file(&pr.path, options))
-        .count();
+    let mut skipped_count = 0;
+    let mut runnable_problem_runs = Vec::new();
+    for problem_run in problem_runs {
+        if should_skip_parse_failed_file(&problem_run.path, options) {
+            skipped_count += 1;
+        } else {
+            runnable_problem_runs.push(problem_run);
+        }
+    }
 
     let counter = AtomicUsize::new(0);
-    let results: Vec<(ProblemRun, ProveFileResult, u128)> = problem_runs
+    let results: Vec<(ProblemRun, ProveFileResult, u128)> = runnable_problem_runs
         .par_iter()
-        .filter(|pr| !should_skip_parse_failed_file(&pr.path, options))
         .map(|problem_run| {
+            let problem_run = *problem_run;
             let current = counter.fetch_add(1, Ordering::Relaxed) + 1;
-            let (result, elapsed_ms) = prove_file(problem_run, options, cancellation, current, total);
+            let (result, elapsed_ms) =
+                prove_file(problem_run, options, cancellation, current, total);
+            if let Some(sender) = db_sender.as_ref() {
+                if let Some(record) = result_record_for_problem(problem_run, &result, elapsed_ms) {
+                    if let Err(err) = sender.send(record) {
+                        eprintln!(
+                            "warning: failed to queue result for {}: {err}",
+                            problem_run.problem_id()
+                        );
+                    }
+                }
+            }
             (problem_run.clone(), result, elapsed_ms)
         })
         .collect();
@@ -134,18 +150,8 @@ pub(crate) fn prove_paths(
     let mut summary = ProveBatchSummary::default();
     summary.skipped = skipped_count;
 
-    for (problem_run, result, elapsed_ms) in &results {
+    for (problem_run, result, _elapsed_ms) in &results {
         summary.record_result(problem_run, result);
-        if let Some(sender) = db_sender.as_ref() {
-            if let Some(record) = result_record_for_problem(problem_run, result, *elapsed_ms) {
-                if let Err(err) = sender.send(record) {
-                    eprintln!(
-                        "warning: failed to queue result for {}: {err}",
-                        problem_run.problem_id()
-                    );
-                }
-            }
-        }
     }
 
     print_in_memory_summary(options, &summary, cancellation);

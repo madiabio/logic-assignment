@@ -2,18 +2,11 @@ use super::{AppConfig, default_results_db_path, resolve_persist_path};
 use crate::cli::args::PersistOpt;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-// Mutex to serialize directory-changing tests
-fn dir_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
 
 #[test]
 fn results_db_parses_from_config_toml() {
-    let _lock = dir_lock().lock();
+    let _lock = super::CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     let temp_dir = std::env::temp_dir().join(format!(
         "theorem_prover_results_db_test_{}",
@@ -39,7 +32,7 @@ fn results_db_parses_from_config_toml() {
 
 #[test]
 fn results_db_absent_yields_none() {
-    let _lock = dir_lock().lock();
+    let _lock = super::CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
     let temp_dir = std::env::temp_dir().join(format!(
         "theorem_prover_results_db_absent_test_{}",

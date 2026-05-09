@@ -40,6 +40,8 @@ use crate::cli::args::{CliSearchEngine, PersistOpt, ProveCommand};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::Mutex;
 use theorem_prover::proof::defaults::{
     DEFAULT_MAX_DEPTH, DEFAULT_MAX_FRESH_TERMS_PER_QUANTIFIER, DEFAULT_MAX_STEPS,
     DEFAULT_PROVE_TIMEOUT,
@@ -47,6 +49,9 @@ use theorem_prover::proof::defaults::{
 use theorem_prover::{BiconditionalPolicy, ProofOptions, SearchEngine};
 
 const DEFAULT_RESULTS_DB: &str = r"..\results.db";
+
+#[cfg(test)]
+static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 /// Persistent defaults used by config-backed CLI runs.
 #[derive(Clone, Debug)]
@@ -450,8 +455,6 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     #[test]
     fn load_config_parses_expected_fields() {
         let temp_dir = std::env::temp_dir().join(format!(
@@ -469,7 +472,7 @@ mod tests {
         .expect("config should be written");
 
         let original_dir = std::env::current_dir().expect("cwd should exist");
-        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
         let config = load_config().expect("config should parse");
         std::env::set_current_dir(original_dir).expect("cwd should be restored");
@@ -500,7 +503,7 @@ mod tests {
         .expect("config should be written");
 
         let original_dir = std::env::current_dir().expect("cwd should exist");
-        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
         let result = load_config();
         std::env::set_current_dir(original_dir).expect("cwd should be restored");
@@ -615,7 +618,7 @@ mod tests {
         .expect("config should be written");
 
         let original_dir = std::env::current_dir().expect("cwd should exist");
-        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
         let config = load_config().expect("priority engine should parse");
         std::env::set_current_dir(original_dir).expect("cwd should be restored");
@@ -640,7 +643,7 @@ mod tests {
         .expect("config should be written");
 
         let original_dir = std::env::current_dir().expect("cwd should exist");
-        let _guard = CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = super::CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_current_dir(&temp_dir).expect("cwd should be switched");
         let config = load_config().expect("priority-id engine should parse");
         std::env::set_current_dir(original_dir).expect("cwd should be restored");
