@@ -39,8 +39,10 @@ use crate::cli::rules::{
 use crate::cli::subset::{ProblemRun, resolve_subset_targets_with_paths};
 use chrono::Local;
 use std::path::Path;
+use std::sync::mpsc;
+use std::thread;
 use theorem_prover::{BiconditionalPolicy, ProofOptions, SearchEngine};
-use theorem_prover::persistence::{self, RunRecord};
+use theorem_prover::persistence::{self, ResultRecord, RunRecord};
 
 /// Formats one key/value pair for the `% settings` comment line.
 fn setting(name: &str, value: impl std::fmt::Display) -> String {
@@ -119,32 +121,34 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let settings = prove_settings_comment(options, &proof_options, biconditional_policy);
     if let Some(target) = &options.target {
         cancellation.defer_exit_until_summary();
-        let mut db_state = prepare_persistence_state(options, &proof_options, config.as_ref());
+        let conn_state = prepare_persistence_state(options, &proof_options, config.as_ref());
+        let (db_sender, writer_handle) = spawn_db_writer(conn_state);
         let target = Path::new(target);
         if target.is_dir() {
-            prove_directory(target, options, &cancellation, &settings, db_state.take());
+            prove_directory(target, options, &cancellation, &settings, db_sender);
+            if let Some(handle) = writer_handle {
+                handle.join().ok();
+            }
         } else {
             print_prove_preamble(options.format, None, &settings);
             let problem_run = ProblemRun {
                 path: target.to_path_buf(),
                 subset_stats: None,
             };
-            let (result, elapsed_ms) = prove_file(
-                &problem_run,
-                options,
-                &cancellation,
-                1,
-                1,
-            );
-            if let Some((conn, run_id)) = db_state.as_ref() {
+            let (result, elapsed_ms) = prove_file(&problem_run, options, &cancellation, 1, 1);
+            if let Some(sender) = db_sender.as_ref() {
                 if let Some(record) = result_record_for_problem(&problem_run, &result, elapsed_ms) {
-                    if let Err(err) = persistence::insert_result(conn, *run_id, &record) {
+                    if let Err(err) = sender.send(record) {
                         eprintln!(
                             "warning: failed to persist result for {}: {err}",
                             problem_run.problem_id()
                         );
                     }
                 }
+            }
+            drop(db_sender);
+            if let Some(handle) = writer_handle {
+                handle.join().ok();
             }
             report_single_prove_file(result);
         }
@@ -154,10 +158,14 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
     let (tptp_root, subset_file) =
         resolve_tptp_config_or_exit(options.tptp_root.as_ref(), options.subset_file.as_ref());
     cancellation.defer_exit_until_summary();
-    let mut db_state = prepare_persistence_state(options, &proof_options, config.as_ref());
+    let conn_state = prepare_persistence_state(options, &proof_options, config.as_ref());
+    let (db_sender, writer_handle) = spawn_db_writer(conn_state);
     let targets = resolve_subset_targets_with_paths(&tptp_root, &subset_file);
     print_prove_preamble(options.format, Some(targets.len()), &settings);
-    prove_paths(&targets, options, &cancellation, db_state.take());
+    prove_paths(&targets, options, &cancellation, db_sender);
+    if let Some(handle) = writer_handle {
+        handle.join().ok();
+    }
 }
 
 /// Dispatches the `rules` command across direct targets or configured subset
@@ -268,6 +276,33 @@ fn prepare_persistence_state(
     });
 
     Some((conn, run_id))
+}
+
+/// Spawns a dedicated writer thread that owns the SQLite connection and receives
+/// `ResultRecord`s over a channel.
+///
+/// Returns `(None, None)` when persistence is disabled. Otherwise returns the
+/// sender end of the channel and a join handle for the writer thread.
+fn spawn_db_writer(
+    conn_state: Option<(rusqlite::Connection, i64)>,
+) -> (Option<mpsc::Sender<ResultRecord>>, Option<thread::JoinHandle<()>>) {
+    match conn_state {
+        None => (None, None),
+        Some((conn, run_id)) => {
+            let (tx, rx) = mpsc::channel::<ResultRecord>();
+            let handle = thread::spawn(move || {
+                while let Ok(record) = rx.recv() {
+                    if let Err(err) = persistence::insert_result(&conn, run_id, &record) {
+                        eprintln!(
+                            "warning: failed to persist result for {}: {err}",
+                            record.problem_id
+                        );
+                    }
+                }
+            });
+            (Some(tx), Some(handle))
+        }
+    }
 }
 
 /// Builds the run metadata row stored in SQLite for a proof batch.

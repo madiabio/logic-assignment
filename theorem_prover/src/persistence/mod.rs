@@ -372,4 +372,28 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!(mode, "wal");
     }
+
+    #[test]
+    fn channel_writer_inserts_all_received_records() {
+        use std::sync::mpsc;
+
+        let conn = in_memory();
+        ensure_schema(&conn).unwrap();
+        let run_id = insert_run(&conn, &sample_run()).unwrap();
+
+        let (tx, rx) = mpsc::channel::<ResultRecord>();
+
+        tx.send(sample_result("provable")).unwrap();
+        tx.send(sample_result("timeout")).unwrap();
+        tx.send(sample_result("provable")).unwrap();
+        drop(tx);
+
+        while let Ok(record) = rx.recv() {
+            insert_result(&conn, run_id, &record).unwrap();
+        }
+
+        let summary = query_run_summary(&conn, run_id).unwrap();
+        assert_eq!(summary.get("provable"), Some(&2u64));
+        assert_eq!(summary.get("timeout"), Some(&1u64));
+    }
 }

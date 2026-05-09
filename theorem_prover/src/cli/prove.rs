@@ -13,11 +13,12 @@ use crate::cli::parse_failure::{
 use crate::cli::subset::{ProblemRun, subset_stats_fields};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::time::Instant;
 use theorem_prover::{
     ProblemPipelineError, ProofStatus, RunProblemOptions, UnknownReason,
 };
-use theorem_prover::persistence::{self, ResultRecord};
+use theorem_prover::persistence::ResultRecord;
 
 /// Result of running the prover on one file.
 #[derive(Clone)]
@@ -77,7 +78,7 @@ pub(crate) fn prove_directory(
     options: &ProveCommand,
     cancellation: &CancellationState,
     settings: &str,
-    db_state: Option<(rusqlite::Connection, i64)>,
+    db_sender: Option<mpsc::Sender<ResultRecord>>,
 ) {
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     let mut problem_runs = Vec::new();
@@ -96,21 +97,20 @@ pub(crate) fn prove_directory(
     }
 
     print_prove_preamble(options.format, None, settings);
-    prove_paths(&problem_runs, options, cancellation, db_state);
+    prove_paths(&problem_runs, options, cancellation, db_sender);
 }
 
 /// Processes many problems through the prover, emits aggregate results, and
-/// optionally persists each result to a SQLite database.
+/// optionally sends each result to a DB writer thread over a channel.
 ///
-/// When `db_state` is `Some((conn, run_id))`, every successful problem result
-/// is committed to the database immediately after it completes. The final
-/// summary is then sourced from a `query_run_summary` DB query. When
-/// `db_state` is `None`, the existing in-memory `ProveBatchSummary` is used.
+/// When `db_sender` is `Some(sender)`, every successful problem result is sent
+/// to the writer thread. The in-memory `ProveBatchSummary` is always used for
+/// the final summary output.
 pub(crate) fn prove_paths(
     problem_runs: &[ProblemRun],
     options: &ProveCommand,
     cancellation: &CancellationState,
-    db_state: Option<(rusqlite::Connection, i64)>,
+    db_sender: Option<mpsc::Sender<ResultRecord>>,
 ) {
     let mut summary = ProveBatchSummary::default();
     let total = problem_runs.len();
@@ -123,11 +123,11 @@ pub(crate) fn prove_paths(
         let (result, elapsed_ms) = prove_file(problem_run, options, cancellation, index + 1, total);
         summary.record_result(problem_run, &result);
 
-        if let Some((conn, run_id)) = db_state.as_ref() {
+        if let Some(sender) = db_sender.as_ref() {
             if let Some(record) = result_record_for_problem(problem_run, &result, elapsed_ms) {
-                if let Err(err) = persistence::insert_result(conn, *run_id, &record) {
+                if let Err(err) = sender.send(record) {
                     eprintln!(
-                        "warning: failed to persist result for {}: {err}",
+                        "warning: failed to queue result for {}: {err}",
                         problem_run.problem_id()
                     );
                 }
@@ -135,57 +135,7 @@ pub(crate) fn prove_paths(
         }
     }
 
-    // Print summary sourcing counts from DB when persistence is active.
-    if let Some((conn, run_id)) = db_state.as_ref() {
-        match persistence::query_run_summary(conn, *run_id) {
-            Ok(db_summary) => {
-                let get = |key: &str| db_summary.get(key).copied().unwrap_or(0).to_string();
-                match options.format {
-                    OutputFormat::Human => {
-                        print_summary_header("summary");
-                        print_summary_row(&[
-                            ("processed", summary.processed.to_string()),
-                            ("skipped", summary.skipped.to_string()),
-                            ("provable", get("provable")),
-                            ("not_provable", get("not_provable")),
-                            ("timeout", get("timeout")),
-                            ("unknown", get("unknown")),
-                            ("cancelled", get("cancelled")),
-                            ("not_impl", get("not_implemented")),
-                            ("error", get("error")),
-                            ("failed_to_process", summary.failed_to_process.to_string()),
-                        ]);
-                        if cancellation.is_requested() {
-                            eprintln!("Cancelled.");
-                        }
-                    }
-                    OutputFormat::Tsv => {
-                        println!(
-                            "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                            summary.processed,
-                            summary.skipped,
-                            get("provable"),
-                            get("not_provable"),
-                            get("timeout"),
-                            get("unknown"),
-                            get("cancelled"),
-                            get("not_implemented"),
-                            get("error"),
-                            summary.failed_to_process
-                        );
-                    }
-                }
-            }
-            Err(err) => {
-                eprintln!(
-                    "warning: failed to query run summary from DB: {err}"
-                );
-                print_in_memory_summary(options, &summary, cancellation);
-            }
-        }
-    } else {
-        print_in_memory_summary(options, &summary, cancellation);
-    }
+    print_in_memory_summary(options, &summary, cancellation);
 
     if options.format == OutputFormat::Human && !summary.failed_files.is_empty() {
         eprintln!("Failed files:");
