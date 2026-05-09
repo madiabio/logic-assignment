@@ -129,8 +129,7 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
                 path: target.to_path_buf(),
                 subset_stats: None,
             };
-            let started_at = std::time::Instant::now();
-            let result = prove_file(
+            let (result, elapsed_ms) = prove_file(
                 &problem_run,
                 options,
                 &cancellation,
@@ -138,7 +137,6 @@ pub(crate) fn run_prover_mode(options: &ProveCommand) {
                 1,
             );
             if let Some((conn, run_id)) = db_state.as_ref() {
-                let elapsed_ms = started_at.elapsed().as_millis();
                 if let Some(record) = result_record_for_problem(&problem_run, &result, elapsed_ms) {
                     if let Err(err) = persistence::insert_result(conn, *run_id, &record) {
                         eprintln!(

@@ -126,9 +126,7 @@ pub(crate) fn prove_paths(
             continue;
         }
 
-        let started_at = Instant::now();
-        let result = prove_file(problem_run, options, cancellation, index + 1, total);
-        let elapsed_ms = started_at.elapsed().as_millis();
+        let (result, elapsed_ms) = prove_file(problem_run, options, cancellation, index + 1, total);
         summary.record_result(problem_run, &result);
 
         if let Some((conn, run_id)) = db_state.as_ref() {
@@ -295,14 +293,14 @@ pub(crate) fn result_record_for_problem(
 }
 
 /// Runs the prover for one file and returns either a proof status or a
-/// processing failure.
+/// processing failure, along with the internally-measured elapsed time in milliseconds.
 pub(crate) fn prove_file(
     problem_run: &ProblemRun,
     options: &ProveCommand,
     cancellation: &CancellationState,
     current: usize,
     total: usize,
-) -> ProveFileResult {
+) -> (ProveFileResult, u128) {
     let proof_options = prover_options_from_cli(options);
     let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
     let started_at = Instant::now();
@@ -344,7 +342,7 @@ pub(crate) fn prove_file(
                     status
                 ),
             }
-            ProveFileResult::Status(status, unknown_reason)
+            (ProveFileResult::Status(status, unknown_reason), elapsed_ms)
         }
         Err(ProblemPipelineError::Parse(err)) => {
             write_parse_failure_marker(&problem_run.path, &err);
@@ -365,7 +363,7 @@ pub(crate) fn prove_file(
                 ),
             }
             eprintln!("{err}");
-            ProveFileResult::ProcessingFailure
+            (ProveFileResult::ProcessingFailure, started_at.elapsed().as_millis())
         }
         Err(ProblemPipelineError::Include(err)) => {
             clear_parse_failure_marker(&problem_run.path);
@@ -386,7 +384,7 @@ pub(crate) fn prove_file(
                 ),
             }
             eprintln!("{err}");
-            ProveFileResult::ProcessingFailure
+            (ProveFileResult::ProcessingFailure, started_at.elapsed().as_millis())
         }
         Err(ProblemPipelineError::SequentBuild(err)) => {
             match options.format {
@@ -406,7 +404,7 @@ pub(crate) fn prove_file(
                 ),
             }
             eprintln!("sequent construction failed: {err:?}");
-            ProveFileResult::ProcessingFailure
+            (ProveFileResult::ProcessingFailure, started_at.elapsed().as_millis())
         }
     }
 }
