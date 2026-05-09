@@ -47,7 +47,9 @@ pub struct ResultRecord {
 
 /// Open (or create) a SQLite database at the given path.
 pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
-    Connection::open(path)
+    let conn = Connection::open(path)?;
+    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    Ok(conn)
 }
 
 /// Create the `runs` and `results` tables if they do not already exist,
@@ -358,5 +360,16 @@ mod tests {
 
         let result = insert_result(&conn, run_id, &invalid_result);
         assert!(result.is_err(), "INSERT should fail for invalid status");
+    }
+
+    #[test]
+    fn open_db_enables_wal_journal_mode() {
+        let path = std::env::temp_dir().join("tp_wal_test.db");
+        let conn = open_db(&path).unwrap();
+        let mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(mode, "wal");
     }
 }
