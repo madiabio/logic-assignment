@@ -1,4 +1,0 @@
-engine	run_id	total	solved	solve_rate_pct	timeout	max_steps	max_depth	max_biconditionals	quantifier_budget	median_solve_ms	mean_solve_ms
-id	6	737	209	28.4	515	1	0	12	0	7.0	37.7
-naive	5	737	160	21.7	562	1	2	12	0	2.0	26.2
-priority-id	28	737	215	29.2	509	1	0	12	0	8.0	34.4
