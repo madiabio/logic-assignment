@@ -50,10 +50,9 @@ Deepening and Rule Application Prioritisation}
 
 Automated theorem proving (ATP) for first-order logic (FOL) is a mature field
 with industrial-strength tools such as
-Vampire~\cite{kovacs2013vampire}, E~\cite{schulz2002E},
-Prover9~\cite{mccune2010prover9}, and the connection-based
+Vampire~\cite{kovacs2013vampire}, E~\cite{schulz2002E}, and the connection-based
 leanCoP~\cite{otten2003leancop}. These provers are heavily engineered and
-implement sophisticated techniques (resolution, superposition,3indexing,
+implement sophisticated techniques (resolution, superposition, 3indexing,
 clause selection) that are far removed from the textbook sequent calculus
 introduced by Gentzen~\cite{gentzen1935untersuchungen}. The pedagogical
 LK$'$ calculus presented in Hou~\cite{hou2021fundamentals} sits at the other
@@ -61,9 +60,8 @@ end of the spectrum: rules manipulate sequents directly, and a backward proof
 search procedure (Algorithm~2 in that text) can be stated in twenty lines of
 pseudocode. The same simplicity that makes LK$'$ accessible, however, makes
 the na\"ive search strategy fragile: nothing prevents the prover from
-choosing an unhelpful rule order, descending into an unbounded chain of
-quantifier instantiations, or applying eigenvariable rules so eagerly that
-later branching decompositions cannot recover.
+choosing an unhelpful rule order or descending into unbounded
+branching.
 
 This paper revisits Algorithm~2 from a practical standpoint. We give a
 faithful Rust implementation of the baseline, identify two failure modes,
@@ -72,7 +70,7 @@ six-class \emph{priority schedule} that refines the ``\textbf{else if}''
 chain of Algorithm~2 (Sect.~\ref{sec:approach}), and an
 \emph{iterative-deepening} envelope around the depth-first
 search~\cite{korf1985iterative}. An empirical evaluation on a 737-problem
-provable subset of TPTP shows that the combined prover closes 34.4\,\%
+provable subset of TPTP shows that the combined prover closes 37.5\,\%
 more problems than the baseline within a one-second budget
 (Sect.~\ref{sec:implementation}).
 
