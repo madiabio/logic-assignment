@@ -133,21 +133,85 @@ class QuantifiedFormulaGenerator:
         """Create an implication: antecedent => consequent."""
         return f"({antecedent} => {consequent})"
 
+class EasyTierProblems:
+    """Generate easy tier problems (propositional, 5-20 atoms)."""
+
+    def __init__(self, seed: int = None):
+        self.seed = seed
+        self.problem_counter = 0
+
+    def provable_easy(self) -> Tuple[str, str]:
+        """Generate a provable easy problem.
+
+        Returns: (problem_name, formula_string)
+        """
+        self.problem_counter += 1
+
+        # Pattern: Tautology (p | ~p)
+        if self.problem_counter % 3 == 0:
+            gen = PropositionGenerator(seed=self.seed)
+            formula = gen.tautology()
+            return (f"easy_prov_{self.problem_counter}", formula)
+
+        # Pattern: Modus ponens style (p, (p => q) implies q)
+        # Represented as: (p & (p => q)) => q
+        elif self.problem_counter % 3 == 1:
+            gen = PropositionGenerator(seed=self.seed)
+            p = gen.fresh_prop()
+            q = gen.fresh_prop()
+            # This is valid: if you have p and p=>q, you can derive q
+            formula = f"((({p} & ({p} => {q})) => {q}))"
+            return (f"easy_prov_{self.problem_counter}", formula)
+
+        # Pattern: De Morgan's laws
+        else:
+            gen = PropositionGenerator(seed=self.seed)
+            p = gen.fresh_prop()
+            q = gen.fresh_prop()
+            # ~(p & q) is equivalent to (~p | ~q), so this is a tautology
+            formula = f"(~({p} & {q}) | (~{p} | ~{q}))"
+            return (f"easy_prov_{self.problem_counter}", formula)
+
+    def unprovable_easy(self) -> Tuple[str, str]:
+        """Generate an unprovable easy problem.
+
+        Returns: (problem_name, formula_string)
+        """
+        self.problem_counter += 1
+
+        # Pattern: Independent propositions (p, q, goal=r, where r is unrelated)
+        if self.problem_counter % 2 == 0:
+            gen = PropositionGenerator(seed=self.seed)
+            p = gen.fresh_prop()
+            q = gen.fresh_prop()
+            r = gen.fresh_prop()
+            # No way to derive r from p and q
+            formula = f"({p} & {q}) => {r}"
+            return (f"easy_unprov_{self.problem_counter}", formula)
+
+        # Pattern: Contradiction that doesn't resolve
+        else:
+            gen = PropositionGenerator(seed=self.seed)
+            p = gen.fresh_prop()
+            q = gen.fresh_prop()
+            # p & ~p is unprovable (contradictory premises don't prove anything useful)
+            formula = f"({p} & ~{p}) => {q}"
+            return (f"easy_unprov_{self.problem_counter}", formula)
+
 def main():
     pass
 
 if __name__ == "__main__":
-    # Quick test
-    prop_gen = PropositionGenerator(seed=42)
-    print("Tautology:", prop_gen.tautology())
-    print("Conjunction:", prop_gen.conjunction(3))
+    easy_gen = EasyTierProblems(seed=42)
 
-    quant_gen = QuantifiedFormulaGenerator(seed=42)
-    simple = quant_gen.simple_predicate()
-    print("Simple predicate:", simple)
+    # Generate 5 provable
+    for _ in range(5):
+        name, formula = easy_gen.provable_easy()
+        atom_count = AtomCounter.count_atoms(formula)
+        print(f"{name}: {formula} (atoms: {atom_count})")
 
-    universal = quant_gen.universal_formula(simple)
-    print("Universal formula:", universal)
-
-    atoms = AtomCounter.count_atoms(universal)
-    print(f"Atom count: {atoms}")
+    # Generate 5 unprovable
+    for _ in range(5):
+        name, formula = easy_gen.unprovable_easy()
+        atom_count = AtomCounter.count_atoms(formula)
+        print(f"{name}: {formula} (atoms: {atom_count})")
