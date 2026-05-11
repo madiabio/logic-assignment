@@ -198,6 +198,62 @@ class EasyTierProblems:
             formula = f"({p} & ~{p}) => {q}"
             return (f"easy_unprov_{self.problem_counter}", formula)
 
+class MediumTierProblems:
+    """Generate medium tier problems (universal quantifiers, 20-50 atoms)."""
+
+    def __init__(self, seed: int = None):
+        self.seed = seed
+        self.problem_counter = 0
+
+    def provable_medium(self) -> Tuple[str, str]:
+        """Generate a provable medium problem with universal quantifiers."""
+        self.problem_counter += 1
+
+        # Pattern: Universal instantiation
+        # ! [X] : p(X) is provable if we construct the right instances
+        if self.problem_counter % 2 == 0:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            p_univ = gen.universal_formula(gen.simple_predicate())
+            # Create another instance: p is true everywhere, so it's true for specific X
+            formula = f"({p_univ} => {gen.simple_predicate()})"
+            return (f"medium_prov_{self.problem_counter}", formula)
+
+        # Pattern: Tautology with quantifiers
+        # ! [X] : (p(X) | ~p(X)) is always true
+        else:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            var = gen.fresh_var()
+            pred = gen.fresh_pred(1)
+            body = f"({pred}({var}) | ~{pred}({var}))"
+            formula = gen.universal_formula(body)
+            return (f"medium_prov_{self.problem_counter}", formula)
+
+    def unprovable_medium(self) -> Tuple[str, str]:
+        """Generate an unprovable medium problem."""
+        self.problem_counter += 1
+
+        # Pattern: Existential claim without proof
+        # ? [X] : p(X) is unprovable without premises asserting it
+        if self.problem_counter % 2 == 0:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            formula = gen.existential_formula(gen.simple_predicate())
+            return (f"medium_unprov_{self.problem_counter}", formula)
+
+        # Pattern: Broken deduction chain
+        # ! [X] : (p(X) => q(X)), and we need to prove ! [X] : r(X)
+        # but r is unrelated to p and q
+        else:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            var = gen.fresh_var()
+            p_pred = gen.fresh_pred(1)
+            q_pred = gen.fresh_pred(1)
+            r_pred = gen.fresh_pred(1)
+
+            premise = f"! [X] : ({p_pred}(X) => {q_pred}(X))"
+            goal = f"! [X] : {r_pred}(X)"
+            formula = f"({premise} => {goal})"
+            return (f"medium_unprov_{self.problem_counter}", formula)
+
 def main():
     pass
 
@@ -215,3 +271,17 @@ if __name__ == "__main__":
         name, formula = easy_gen.unprovable_easy()
         atom_count = AtomCounter.count_atoms(formula)
         print(f"{name}: {formula} (atoms: {atom_count})")
+
+    medium_gen = MediumTierProblems(seed=42)
+
+    # Generate 5 provable
+    for _ in range(5):
+        name, formula = medium_gen.provable_medium()
+        atom_count = AtomCounter.count_atoms(formula)
+        print(f"{name}: atoms={atom_count}")
+
+    # Generate 5 unprovable
+    for _ in range(5):
+        name, formula = medium_gen.unprovable_medium()
+        atom_count = AtomCounter.count_atoms(formula)
+        print(f"{name}: atoms={atom_count}")
