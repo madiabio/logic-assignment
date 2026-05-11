@@ -254,6 +254,149 @@ class MediumTierProblems:
             formula = f"({premise} => {goal})"
             return (f"medium_unprov_{self.problem_counter}", formula)
 
+class HardTierProblems:
+    """Generate hard tier problems (nested quantifiers, 50-100 atoms)."""
+
+    def __init__(self, seed: int = None):
+        self.seed = seed
+        self.problem_counter = 0
+
+    def provable_hard(self) -> Tuple[str, str]:
+        """Generate a provable hard problem with nested quantifiers."""
+        self.problem_counter += 1
+
+        # Pattern: Nested universal quantifiers with implication
+        # ! [X] : ! [Y] : (p(X,Y) => q(X,Y))
+        # This is provable because it's a valid form
+        if self.problem_counter % 2 == 0:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            p_pred = gen.fresh_pred(2)
+            q_pred = gen.fresh_pred(2)
+            body = f"({p_pred}({x},{y}) => {q_pred}({x},{y}))"
+            inner = f"! [{y}] : ({body})"
+            formula = f"! [{x}] : ({inner})"
+            return (f"hard_prov_{self.problem_counter}", formula)
+
+        # Pattern: Tautology with multiple quantifiers
+        else:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            p = gen.fresh_pred(2)
+            body = f"({p}({x},{y}) | ~{p}({x},{y}))"
+            inner = f"! [{y}] : ({body})"
+            formula = f"! [{x}] : ({inner})"
+            return (f"hard_prov_{self.problem_counter}", formula)
+
+    def unprovable_hard(self) -> Tuple[str, str]:
+        """Generate an unprovable hard problem."""
+        self.problem_counter += 1
+
+        # Pattern: Impossible existential in nested context
+        # ! [X] : ? [Y] : p(X,Y) then prove ! [X] : ! [Y] : q(X,Y) - unrelated
+        if self.problem_counter % 2 == 0:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            p = gen.fresh_pred(2)
+            q = gen.fresh_pred(2)
+
+            premise = f"! [{x}] : ? [{y}] : {p}({x},{y})"
+            goal = f"! [{x}] : ! [{y}] : {q}({x},{y})"
+            formula = f"({premise} => {goal})"
+            return (f"hard_unprov_{self.problem_counter}", formula)
+
+        # Pattern: Conflicting constraints
+        else:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            p = gen.fresh_pred(2)
+            q = gen.fresh_pred(2)
+            r = gen.fresh_pred(2)
+
+            # p and ~p in different contexts can't both be proven
+            body1 = f"({p}({x},{y}) => {q}({x},{y}))"
+            body2 = f"(~{p}({x},{y}) => {r}({x},{y}))"
+            formula = f"! [{x}] : ! [{y}] : (({body1}) & ({body2}))"
+            return (f"hard_unprov_{self.problem_counter}", formula)
+
+class ExpertTierProblems:
+    """Generate expert tier problems (deeply nested, 100-150 atoms)."""
+
+    def __init__(self, seed: int = None):
+        self.seed = seed
+        self.problem_counter = 0
+
+    def provable_expert(self) -> Tuple[str, str]:
+        """Generate a provable expert problem with deep nesting."""
+        self.problem_counter += 1
+
+        # Pattern: Triple nested quantifiers with tautology
+        if self.problem_counter % 2 == 0:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            z = gen.fresh_var()
+            p = gen.fresh_pred(3)
+
+            inner = f"({p}({x},{y},{z}) | ~{p}({x},{y},{z}))"
+            mid = f"? [{z}] : ({inner})"
+            outer = f"! [{y}] : ({mid})"
+            formula = f"! [{x}] : ({outer})"
+            return (f"expert_prov_{self.problem_counter}", formula)
+
+        # Pattern: Provable chain of implications
+        else:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            a = gen.fresh_pred(2)
+            b = gen.fresh_pred(2)
+            c = gen.fresh_pred(2)
+
+            # (p=>q) & (q=>r) => (p=>r)
+            body = f"(({a}({x},{y}) => {b}({x},{y})) & ({b}({x},{y}) => {c}({x},{y}))) => ({a}({x},{y}) => {c}({x},{y}))"
+            formula = f"! [{x}] : ! [{y}] : ({body})"
+            return (f"expert_prov_{self.problem_counter}", formula)
+
+    def unprovable_expert(self) -> Tuple[str, str]:
+        """Generate an unprovable expert problem."""
+        self.problem_counter += 1
+
+        # Pattern: Deeply nested with unrelated predicates
+        if self.problem_counter % 2 == 0:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            z = gen.fresh_var()
+            p = gen.fresh_pred(3)
+            q = gen.fresh_pred(3)
+
+            premise = f"! [{x}] : ! [{y}] : ? [{z}] : {p}({x},{y},{z})"
+            goal = f"! [{x}] : ! [{y}] : ! [{z}] : {q}({x},{y},{z})"
+            formula = f"({premise} => {goal})"
+            return (f"expert_unprov_{self.problem_counter}", formula)
+
+        # Pattern: Contradictory constraints at multiple levels
+        else:
+            gen = QuantifiedFormulaGenerator(seed=self.seed)
+            x = gen.fresh_var()
+            y = gen.fresh_var()
+            z = gen.fresh_var()
+            p = gen.fresh_pred(3)
+            q = gen.fresh_pred(3)
+            r = gen.fresh_pred(3)
+
+            clause1 = f"({p}({x},{y},{z}) => {q}({x},{y},{z}))"
+            clause2 = f"(~{p}({x},{y},{z}) => {r}({x},{y},{z}))"
+            goal = f"~{q}({x},{y},{z})"
+
+            formula = f"! [{x}] : ! [{y}] : ? [{z}] : (({clause1} & {clause2}) => {goal})"
+            return (f"expert_unprov_{self.problem_counter}", formula)
+
 def main():
     pass
 
@@ -285,3 +428,14 @@ if __name__ == "__main__":
         name, formula = medium_gen.unprovable_medium()
         atom_count = AtomCounter.count_atoms(formula)
         print(f"{name}: atoms={atom_count}")
+
+    hard_gen = HardTierProblems(seed=42)
+    expert_gen = ExpertTierProblems(seed=42)
+
+    for _ in range(3):
+        name, formula = hard_gen.provable_hard()
+        print(f"{name}: atoms={AtomCounter.count_atoms(formula)}")
+
+    for _ in range(3):
+        name, formula = expert_gen.provable_expert()
+        print(f"{name}: atoms={AtomCounter.count_atoms(formula)}")
