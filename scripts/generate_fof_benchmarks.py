@@ -2,9 +2,26 @@
 """
 FOF Benchmark Problem Generator
 
-Generates TPTP FOF problems of varying difficulty for benchmarking
-the theorem prover. Problems are organized into four tiers (easy, medium,
-hard, expert) with 50/50 provable/unprovable split.
+Generates TPTP FOF (First Order Logic) problems for benchmarking the theorem prover.
+Creates 100+ problems across four difficulty tiers (easy, medium, hard, expert),
+organized into separate .p files in the AI_generated/ directory.
+
+Problem distribution:
+- Easy:   ~15 problems (propositional, 5-20 atoms)
+- Medium: ~30 problems (universal quantifiers, 20-50 atoms)
+- Hard:   ~30 problems (nested quantifiers, 50-100 atoms)
+- Expert: ~25 problems (deeply nested, 100-150 atoms)
+
+Each tier maintains a 50/50 split between provable and unprovable problems.
+
+Usage:
+    python scripts/generate_fof_benchmarks.py
+
+This generates output files:
+    AI_generated/easy.p
+    AI_generated/medium.p
+    AI_generated/hard.p
+    AI_generated/expert.p
 """
 
 import random
