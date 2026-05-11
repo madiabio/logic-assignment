@@ -1,0 +1,10 @@
+prediction	gold	count
+false	false	5
+inconsistent	false	1
+inconsistent	true	1
+inconsistent	uncertain	1
+true	true	8
+undetermined	false	36
+undetermined	true	42
+undetermined	uncertain	38
+unknown	uncertain	8
