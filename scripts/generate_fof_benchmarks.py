@@ -397,45 +397,48 @@ class ExpertTierProblems:
             formula = f"! [{x}] : ! [{y}] : ? [{z}] : (({clause1} & {clause2}) => {goal})"
             return (f"expert_unprov_{self.problem_counter}", formula)
 
+def generate_all_problems(output_dir: str = "AI_generated"):
+    """Generate all tiers and write to .p files."""
+    import os
+
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+
+    tiers = [
+        ("easy", EasyTierProblems, 15),      # ~15 problems
+        ("medium", MediumTierProblems, 30),   # ~30 problems
+        ("hard", HardTierProblems, 30),       # ~30 problems
+        ("expert", ExpertTierProblems, 25),   # ~25 problems
+    ]
+
+    for tier_name, tier_class, count in tiers:
+        output_file = os.path.join(output_dir, f"{tier_name}.p")
+
+        with open(output_file, "w") as f:
+            gen = tier_class(seed=42 + hash(tier_name) % 1000)
+
+            # Generate half provable, half unprovable
+            provable_count = count // 2
+            unprovable_count = count - provable_count
+
+            for _ in range(provable_count):
+                name, formula = gen.provable_easy() if tier_name == "easy" else \
+                               gen.provable_medium() if tier_name == "medium" else \
+                               gen.provable_hard() if tier_name == "hard" else \
+                               gen.provable_expert()
+                f.write(f"fof({name}, conjecture, {formula}).\n")
+
+            for _ in range(unprovable_count):
+                name, formula = gen.unprovable_easy() if tier_name == "easy" else \
+                               gen.unprovable_medium() if tier_name == "medium" else \
+                               gen.unprovable_hard() if tier_name == "hard" else \
+                               gen.unprovable_expert()
+                f.write(f"fof({name}, conjecture, {formula}).\n")
+
+        print(f"Generated {count} problems in {output_file}")
+
 def main():
-    pass
+    generate_all_problems(output_dir="AI_generated")
 
 if __name__ == "__main__":
-    easy_gen = EasyTierProblems(seed=42)
-
-    # Generate 5 provable
-    for _ in range(5):
-        name, formula = easy_gen.provable_easy()
-        atom_count = AtomCounter.count_atoms(formula)
-        print(f"{name}: {formula} (atoms: {atom_count})")
-
-    # Generate 5 unprovable
-    for _ in range(5):
-        name, formula = easy_gen.unprovable_easy()
-        atom_count = AtomCounter.count_atoms(formula)
-        print(f"{name}: {formula} (atoms: {atom_count})")
-
-    medium_gen = MediumTierProblems(seed=42)
-
-    # Generate 5 provable
-    for _ in range(5):
-        name, formula = medium_gen.provable_medium()
-        atom_count = AtomCounter.count_atoms(formula)
-        print(f"{name}: atoms={atom_count}")
-
-    # Generate 5 unprovable
-    for _ in range(5):
-        name, formula = medium_gen.unprovable_medium()
-        atom_count = AtomCounter.count_atoms(formula)
-        print(f"{name}: atoms={atom_count}")
-
-    hard_gen = HardTierProblems(seed=42)
-    expert_gen = ExpertTierProblems(seed=42)
-
-    for _ in range(3):
-        name, formula = hard_gen.provable_hard()
-        print(f"{name}: atoms={AtomCounter.count_atoms(formula)}")
-
-    for _ in range(3):
-        name, formula = expert_gen.provable_expert()
-        print(f"{name}: atoms={AtomCounter.count_atoms(formula)}")
+    main()
