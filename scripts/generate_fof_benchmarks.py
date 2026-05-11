@@ -24,8 +24,10 @@ This generates output files:
     AI_generated/expert.p
 """
 
+import os
+import re
 import random
-from typing import Set, Tuple
+from typing import Optional, Tuple
 
 class AtomCounter:
     """Counts unique atoms in a formula string."""
@@ -34,7 +36,6 @@ class AtomCounter:
     def count_atoms(formula: str) -> int:
         """Count unique predicate atoms in a formula."""
         # Remove comments, whitespace, operators
-        import re
         # Extract predicate names (uppercase letters followed by optional args)
         atoms = re.findall(r'\b[a-z_][a-z_0-9]*(?:\([^)]*\))?', formula)
         # Remove quantifier variables and operators
@@ -44,7 +45,7 @@ class AtomCounter:
 class PropositionGenerator:
     """Generates simple propositional formulas."""
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: Optional[int] = None):
         if seed is not None:
             random.seed(seed)
         self.prop_counter = 0
@@ -81,7 +82,7 @@ class PropositionGenerator:
 class QuantifiedFormulaGenerator:
     """Generates first-order formulas with quantifiers."""
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: Optional[int] = None):
         if seed is not None:
             random.seed(seed)
         self.var_counter = 0
@@ -153,7 +154,7 @@ class QuantifiedFormulaGenerator:
 class EasyTierProblems:
     """Generate easy tier problems (propositional, 5-20 atoms)."""
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: Optional[int] = None):
         self.seed = seed
         self.problem_counter = 0
 
@@ -218,7 +219,7 @@ class EasyTierProblems:
 class MediumTierProblems:
     """Generate medium tier problems (universal quantifiers, 20-50 atoms)."""
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: Optional[int] = None):
         self.seed = seed
         self.problem_counter = 0
 
@@ -274,7 +275,7 @@ class MediumTierProblems:
 class HardTierProblems:
     """Generate hard tier problems (nested quantifiers, 50-100 atoms)."""
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: Optional[int] = None):
         self.seed = seed
         self.problem_counter = 0
 
@@ -343,7 +344,7 @@ class HardTierProblems:
 class ExpertTierProblems:
     """Generate expert tier problems (deeply nested, 100-150 atoms)."""
 
-    def __init__(self, seed: int = None):
+    def __init__(self, seed: Optional[int] = None):
         self.seed = seed
         self.problem_counter = 0
 
@@ -414,9 +415,18 @@ class ExpertTierProblems:
             formula = f"! [{x}] : ! [{y}] : ? [{z}] : (({clause1} & {clause2}) => {goal})"
             return (f"expert_unprov_{self.problem_counter}", formula)
 
+def get_tier_methods(tier_name: str, tier_class):
+    """Get the method names for provable and unprovable problems for a tier."""
+    methods_map = {
+        'easy': ('provable_easy', 'unprovable_easy'),
+        'medium': ('provable_medium', 'unprovable_medium'),
+        'hard': ('provable_hard', 'unprovable_hard'),
+        'expert': ('provable_expert', 'unprovable_expert'),
+    }
+    return methods_map[tier_name]
+
 def generate_all_problems(output_dir: str = "AI_generated"):
     """Generate all tiers and write to .p files."""
-    import os
 
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -438,18 +448,16 @@ def generate_all_problems(output_dir: str = "AI_generated"):
             provable_count = count // 2
             unprovable_count = count - provable_count
 
+            provable_method_name, unprovable_method_name = get_tier_methods(tier_name, tier_class)
+            provable_method = getattr(gen, provable_method_name)
+            unprovable_method = getattr(gen, unprovable_method_name)
+
             for _ in range(provable_count):
-                name, formula = gen.provable_easy() if tier_name == "easy" else \
-                               gen.provable_medium() if tier_name == "medium" else \
-                               gen.provable_hard() if tier_name == "hard" else \
-                               gen.provable_expert()
+                name, formula = provable_method()
                 f.write(f"fof({name}, conjecture, {formula}).\n")
 
             for _ in range(unprovable_count):
-                name, formula = gen.unprovable_easy() if tier_name == "easy" else \
-                               gen.unprovable_medium() if tier_name == "medium" else \
-                               gen.unprovable_hard() if tier_name == "hard" else \
-                               gen.unprovable_expert()
+                name, formula = unprovable_method()
                 f.write(f"fof({name}, conjecture, {formula}).\n")
 
         print(f"Generated {count} problems in {output_file}")
