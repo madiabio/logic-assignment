@@ -14,14 +14,19 @@ to a SQLite database. Cancellation under \texttt{Ctrl+C} is handled by the
 \texttt{id}, \texttt{priority-id}) are selected at the command line and
 share all code outside the rule scheduler.
 
-Figure~\ref{fig:naive-engine} shows the call structure of the naive
-engine.
+Figure~\ref{fig:sysarch} shows the end-to-end pipeline: TPTP input is
+parsed and built into an initial sequent, then dispatched to one of the
+three engines. Each engine differs only in which scheduler policy is
+injected and whether an iterative-deepening envelope wraps the shared
+\texttt{backwards\_search} kernel.
 
-\begin{figure}
+\begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{figures/naive_engine_diagram.pdf}
-  \caption{Call structure of the naive proof engine.}
-  \label{fig:naive-engine}
+  \includegraphics[width=\linewidth]{figures/system_architecture_diagram.pdf}
+  \caption{System architecture of the theorem prover. Engine selection
+    determines both search strategy and the injected scheduler;
+  \texttt{backwards\_search} is shared across all engines.}
+  \label{fig:sysarch}
 \end{figure}
 
 Two design points warrant mention. First, the LK$'$-reusable rules
