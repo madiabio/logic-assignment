@@ -31,119 +31,7 @@ Deepening and Rule Application Prioritisation}
 \section{Background}\label{sec:background}
 \input{sections/background.tex}
 
-\section{Proposed Approach}\label{sec:approach}
-
-\subsection{Baseline: Naive Backward Search}\label{sec:baseline}
-Algorithm~\ref{alg:naive} in this report reproduces the na\"ive
-backward proof-search procedure of
-Hou~\cite[p.~67]{hou2021fundamentals}, restated in our
-notation. The five priority groups are mutually exclusive: a higher-priority
-group is exhausted before any rule from a lower-priority group is
-considered.
-
-\input{pseudocode/naive_alg}
-
-Figure~\ref{fig:naive-engine} illustrates the single-pass structure:
-one call to \texttt{backwards\_search} with no outer loop, using the
-four-class naive scheduler that mirrors Algorithm~2 of
-Hou~\cite{hou2021fundamentals}.
-
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{figures/naive_engine_diagram.pdf}
-  \caption{Naive proof engine: single-pass DFS with the four-class naive scheduler.}
-  \label{fig:naive-engine}
-\end{figure}
-
-\subsection{Failure modes}
-We identify two structural weaknesses of Algorithm~\ref{alg:naive}.
-\textbf{(F1) Eager eigenconstants.} Group~2 lumps the eigenvariable
-quantifier rules ($\forall R$, $\exists L$) with non-branching
-propositional rules, so the prover commits to a fresh eigenconstant
-even when a branching propositional decomposition would have closed the
-branch by identity. Each eigenconstant enlarges the symbol set, which
-enlarges the candidate set for subsequent $\forall L$/$\exists R$
-instantiations.
-\textbf{(F2) Unbounded reusable instantiation.} Because $\forall L$ and
-$\exists R$ retain the original quantified formula on the sequent,
-groups~4 and 5 of Algorithm~\ref{alg:naive} permit an arbitrary number
-of distinct witness terms to be tried before any sibling branch is
-revisited. A na\"ive depth-first loop therefore commits to deep
-instantiation chains before backtracking to easier alternatives.
-
-\subsection{Proposed Algorithm}
-
-We now present our proposed algorithm, which combines iterative
-deepening with a six-class priority schedule to address the failure
-modes identified above. The algorithm maintains the core backward
-proof-search structure while reordering rule application to delay
-expensive quantifier instantiations and avoid deep branching chains.
-
-\input{pseudocode/priority_id_algorithm}
-
-\subsection{Building block A: iterative deepening}
-
-Our first refinement wraps the depth-first search of
-Algorithm~\ref{alg:naive} in an iterative-deepening
-envelope~\cite{korf1985iterative}. The prover runs depth-bounded DFS at
-limits $d = 1, 2, \ldots, d_{\max}$ and returns the first depth at which
-the goal closes. Because backward-search depth is roughly proportional
-to the number of rule applications on the longest open branch, this
-re-orders the search so that shallow proofs are discovered before any
-deep instantiation chain is attempted, mitigating (F2).
-
-\subsection{Building block B: LK$'$ six-class priority schedule}
-
-Our second refinement promotes the five-group ``\textbf{else if}'' chain
-of Algorithm~\ref{alg:naive} to a six-class schedule:
-(1)~\emph{closing} rules $\mathit{id}, \top R, \bot L$;
-(2)~\emph{non-branching propositional} rules $\wedge L, \vee R,
-{\rightarrow}R, \neg L, \neg R$;
-(3)~\emph{branching propositional} rules $\wedge R, \vee L,
-{\rightarrow}L$;
-(4)~\emph{eigenvariable quantifier} rules $\forall R, \exists L$;
-(5)~\emph{reusable quantifiers with visible terms}: $\forall L, \exists R$
-instantiated with a previously unused term already in the sequent;
-(6)~\emph{reusable quantifiers, fresh fallback}: $\forall L, \exists R$
-instantiated with a freshly generated witness subject to a per-occurrence
-budget. The change is twofold. Classes~3 and~4 are reordered: branching
-propositional rules are tried before any eigenconstant is introduced,
-addressing~(F1). The original group~4/5 of Algorithm~\ref{alg:naive} is
-split into classes~5 and~6: the prover always exhausts visible witnesses
-before introducing a fresh constant, addressing~(F2). The bounded
-fresh-fallback budget guarantees that the search returns
-$\textit{Unknown}$ rather than $\textit{NotProvable}$ when only fresh
-witnesses remain to be tried, preserving soundness.
-
-\subsection{Combined prover}
-
-Our proposed prover \texttt{priority-id} combines both building blocks:
-it uses the six-class priority schedule inside an iterative-deepening
-envelope. Two control engines are used for comparison: \texttt{id},
-which applies iterative deepening without the priority schedule, and
-\texttt{naive}, the unmodified baseline. All three share the
-same parser, rule applicators, fresh-name generators, branch-state
-bookkeeping, timeout machinery, and result persistence; they differ only
-in the search engine that orders rule application.
-
-Figure~\ref{fig:priority-id-engine} shows the iterative-deepening outer
-loop retrying \texttt{backwards\_search} from the root at each depth
-limit, with the six-class LK$'$ priority scheduler injected in place of
-the naive one.
-
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{figures/priority_id_engine_diagram.pdf}
-  \caption{Priority-ID proof engine: iterative-deepening envelope around
-    \texttt{backwards\_search} with the six-class LK$'$ priority scheduler.}
-  \label{fig:priority-id-engine}
-\end{figure}
-
-\section{Implementation and Experiment}\label{sec:implementation}
-
-\input{sections/implementation.tex}
-\input{sections/experimental_setup.tex}
-
+\input{sections/proposed-approach.tex}
 \section{Discussion and Conclusion}
 
 The two refinements proposed in this paper address distinct failure modes
@@ -242,7 +130,7 @@ breakdown for each dataset and engine. Outcomes are \textit{Provable},
   \includegraphics[width=\linewidth]{figures/tptp_provable_overview.pdf}
   \caption{TPTP provable subset (737 problems): outcome counts by engine,
     decided vs.\ timeout vs.\ unknown, and timing. See
-    Table~\ref{tab:tptp-provable} for numerical breakdown.}
+  Table~\ref{tab:tptp-provable} for numerical breakdown.}
   \label{fig:tptp-provable}
 \end{figure}
 
@@ -251,7 +139,7 @@ breakdown for each dataset and engine. Outcomes are \textit{Provable},
   \includegraphics[width=\linewidth]{figures/tptp_unprovable_overview.pdf}
   \caption{TPTP counter-satisfiable subset (151 problems): outcome counts by
     engine, decided vs.\ timeout vs.\ unknown, and timing. See
-    Table~\ref{tab:tptp-unprovable} for numerical breakdown.}
+  Table~\ref{tab:tptp-unprovable} for numerical breakdown.}
   \label{fig:tptp-unprovable}
 \end{figure}
 
