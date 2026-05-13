@@ -28,7 +28,7 @@ whether an iterative-deepening loop is present.
 
 Backward proof search applies LK$'$ inference rules \emph{root-first}: the
 prover starts from the goal sequent $\vdash A$ and recursively decomposes it
-until every open leaf is closed by a \emph{closing rule}---the identity axiom
+until every open leaf is closed by a \emph{closing rule}: the identity axiom
 ($\phi \vdash \phi$), $\top R$, or $\bot L$.  Branching rules ($\wedge R$,
 $\vee L$, ${\rightarrow}L$) spawn multiple sub-goals that must all close for
 the parent to close; non-branching rules produce a single successor.
@@ -85,10 +85,20 @@ of distinct witness terms to be tried before any sibling branch is
 revisited. A na\"ive depth-first loop therefore commits to deep
 instantiation chains before backtracking to easier alternatives.
 
+At each node the backward search has branching factor $b$ (the number of
+applicable rule instances), giving $O(b^d)$ nodes at proof depth $d$.
+The reusable quantifier rules make $b$ grow with the size of the visible
+witness pool: each fresh constant generated under (F2) enlarges this pool
+for all subsequent nodes, producing super-exponential expansion in the worst
+case.  First-order logic is in general undecidable~\cite{church1936entscheidungsproblem},
+so a sound proof procedure must be a semi-decision procedure; on non-theorems
+the prover cannot guarantee termination and instead returns \textit{Unknown}
+whenever a resource bound is reached.
+
 \subsection{Proposed Algorithm}\label{sec:proposed}
 
 Two targeted refinements address (F1) and (F2) while leaving the shared
-\texttt{backwards\_search} kernel unchanged.
+search kernel unchanged.
 
 \subsubsection{Building Block A: Iterative Deepening}
 
@@ -100,8 +110,9 @@ $d = 1, 2, \ldots, D$, returning as soon as some depth produces a
 \textsc{Provable} result.  Because proof depth is proportional to the
 number of rule applications on the longest open branch, this guarantees
 that every proof of depth $k$ is discovered before any branch of depth
-$k{+}1$ is explored---and in particular before any deep
-quantifier-instantiation chain is committed to, directly mitigating (F2).
+$k{+}1$ is explored; the search never commits to a deep
+quantifier-instantiation chain before exhausting all shallower
+alternatives, directly mitigating (F2).
 
 \subsubsection{Building Block B: LK$'$ Six-Class Priority Schedule}
 
@@ -146,13 +157,15 @@ introducing a new symbol, addressing (F2).
 The proposed prover \texttt{priority-id} combines both building blocks:
 the six-class priority schedule is injected into \texttt{backwards\_search},
 which is then wrapped in the iterative-deepening outer loop.  Two control
-engines support ablation: \texttt{id}, which applies iterative deepening
-with the naive scheduler, and \texttt{naive}, the unmodified baseline.
+engines are included for comparison: \texttt{id}, which pairs iterative
+deepening with the naive scheduler to isolate the effect of depth-bounding,
+and \texttt{naive}, the unmodified baseline.
 
-Figure~\ref{fig:priority-id-engine} shows the iterative-deepening outer
-loop retrying \texttt{backwards\_search} from the root at each depth
-limit, with the six-class LK$'$ priority scheduler injected in place of
-the naive one.
+Figure~\ref{fig:priority-id-engine} shows the composition of the two
+building blocks: the iterative-deepening envelope drives the outer search
+strategy, while the six-class LK$'$ priority scheduler governs which rules
+are attempted at every node inside the shared \texttt{backwards\_search}
+kernel.
 
 \begin{figure}[t]
   \centering
@@ -164,25 +177,32 @@ the naive one.
 
 \subsection{Expected Performance}\label{sec:hypothesis}
 
-We expect (F2) to be the dominant failure mode on provable benchmarks: the
-naive DFS frequently descends into deep quantifier-instantiation chains and
-times out before reaching a shallow proof that exists.  Iterative deepening
-corrects this directly---every proof of depth $k$ is found before any branch
-of depth $k{+}1$ is explored---so the \texttt{id} engine alone should account
-for the majority of the additional solves over \texttt{naive}.
+We expect (F2) to be the dominant failure mode on provable benchmarks.
+TPTP provable problems frequently admit proofs at shallow depth, but the
+naive DFS commits to groups~4--5 quantifier instantiation before exhausting
+branching alternatives at the same level.  Each fresh witness widens the
+search tree (branching factor $b$ grows with the witness pool), and since
+the tree has $O(b^d)$ nodes at depth $d$, even moderate instantiation depth
+exhausts the time budget before backtracking reaches a shorter proof.
+Iterative deepening corrects this: by bounding depth at $d = 1, 2, \ldots$
+in sequence, the search explores the $O(b^d)$ tree at the current limit
+before allowing any depth-$d{+}1$ branch, guaranteeing that a proof of
+depth $k$ is found on iteration $k$.  The \texttt{id} engine should therefore
+account for the majority of additional solves.
 
 The six-class schedule addresses (F1), which compounds (F2): each premature
 eigenconstant enlarges the visible-term pool, widening the $\forall L$/$\exists
 R$ candidate set for all subsequent iterations and slowing each deepening pass.
-Delaying eigenvariable introduction until after propositional branching reduces
-this compounding effect.  The visible-first/fresh-fallback split of
-classes~5--6 provides a further tightening by keeping the term universe as
-small as possible for as long as possible.
+Delaying eigenvariable introduction to after branching propositional rules
+(class 4 vs.\ group 2) reduces this widening.  The visible-first/fresh-fallback
+split of classes~5--6 provides a further tightening: the prover stays within
+the current term universe as long as possible, deferring symbol creation to
+when it is strictly necessary.
 
 Together, both refinements should yield strictly more solves than either
 building block alone, with iterative deepening contributing the larger share
-and the priority schedule providing a consistent additional gain concentrated
-on problems with many quantified atoms.
+and the priority schedule providing a consistent additional gain on problems
+with many quantified atoms.
 
 \section{Implementation and Experiment}\label{sec:implementation}
 

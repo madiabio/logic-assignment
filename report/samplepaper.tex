@@ -32,39 +32,7 @@ Deepening and Rule Application Prioritisation}
 \input{sections/background.tex}
 
 \input{sections/proposed-approach.tex}
-\section{Discussion and Conclusion}
-
-The two refinements proposed in this paper address distinct failure modes
-of Algorithm~\ref{alg:naive} of \cite{hou2021fundamentals}. Iterative
-deepening, the more impactful of the two, recovers proofs that the
-depth-first baseline misses by getting stuck in deep
-quantifier-instantiation chains: it accounts for 49 of the 55 additional
-solves observed in our combined prover. The LK$'$ six-class priority
-schedule contributes a smaller but consistent additional gain,
-concentrated on problems with many atoms where the visible-terms-first
-phase pays for itself by avoiding unnecessary fresh-witness generation.
-
-The remaining 70\,\% of unsolved problems are dominated by timeouts
-rather than soundness-preserving \emph{Unknown} outcomes, indicating
-that the prover would benefit more from sharper search heuristics than
-from a larger resource budget. Promising directions include
-unification-based instantiation in the manner of
-leanTAP~\cite{beckert1995leantap}, term ordering for $\forall L$/$\exists R$
-witness selection, and lemma sharing across iterative-deepening
-iterations to amortise the re-traversal overhead. Extending the
-evaluation to the unprovable problem class would also test the dual
-question of how quickly the prover can saturate a non-theorem and report
-\emph{NotProvable} rather than time out.
-
-The principal lesson of this study is that small, principled changes to
-the rule-application order of a textbook sequent calculus can produce
-disproportionate improvements in practical solve rate, even before any
-of the heavyweight machinery (resolution, superposition, free-variable
-unification) of mature first-order provers is brought to bear.
-
-\subsubsection{Data Availability.}
-Source code, benchmark scripts, and the SQLite database backing every
-figure in this paper are available at the project repository on GitHub.
+\input{sections/discussion-and-conclusion.tex}
 
 \FloatBarrier
 \bibliographystyle{splncs04}
