@@ -70,30 +70,37 @@ preserving soundness.  A sequent from which no rule applies returns
 \end{figure}
 
 \subsection{Failure Modes}\label{sec:failure}
+
 We identify two structural weaknesses of Algorithm~\ref{alg:naive}.
-\textbf{(F1) Eager eigenconstants.} Group~2 lumps the eigenvariable
-quantifier rules ($\forall R$, $\exists L$) with non-branching
-propositional rules, so the prover commits to a fresh eigenconstant
-even when a branching propositional decomposition would have closed the
-branch by identity. Each eigenconstant enlarges the symbol set, which
-enlarges the candidate set for subsequent $\forall L$/$\exists R$
+
+\textbf{(F1) Eager eigenconstants.}
+Group~2 lumps the eigenvariable quantifier rules ($\forall R$, $\exists L$)
+with non-branching propositional rules, so the prover commits to a fresh
+eigenconstant even when a branching propositional decomposition would have
+closed the branch by identity. Each eigenconstant enlarges the symbol set,
+which enlarges the candidate set for subsequent $\forall L$/$\exists R$
 instantiations.
-\textbf{(F2) Unbounded reusable instantiation.} Because $\forall L$ and
-$\exists R$ retain the original quantified formula on the sequent,
-groups~4 and 5 of Algorithm~\ref{alg:naive} permit an arbitrary number
-of distinct witness terms to be tried before any sibling branch is
-revisited. A na\"ive depth-first loop therefore commits to deep
+
+\textbf{(F2) Unbounded reusable instantiation.}
+Because $\forall L$ and $\exists R$ retain the original quantified formula
+on the sequent, groups~4 and 5 of Algorithm~\ref{alg:naive} permit an
+arbitrary number of distinct witness terms to be tried before any sibling
+branch is revisited. A na\"ive depth-first loop therefore commits to deep
 instantiation chains before backtracking to easier alternatives.
 
-At each node the backward search has branching factor $b$ (the number of
-applicable rule instances), giving $O(b^d)$ nodes at proof depth $d$.
-The reusable quantifier rules make $b$ grow with the size of the visible
-witness pool: each fresh constant generated under (F2) enlarges this pool
-for all subsequent nodes, producing super-exponential expansion in the worst
-case.  First-order logic is in general undecidable~\cite{church1936entscheidungsproblem},
-so a sound proof procedure must be a semi-decision procedure; on non-theorems
-the prover cannot guarantee termination and instead returns \textit{Unknown}
-whenever a resource bound is reached.
+Backward proof search has exponential worst-case complexity in proof depth.
+The search is an AND-OR tree: propositional splitting rules ($\wedge R$,
+$\vee L$, ${\rightarrow}L$) create AND-branches, all of which must close,
+while non-deterministic witness selection for $\forall L$ and $\exists R$
+creates OR-branches that are explored by backtracking.  Under (F2), the
+visible witness pool grows with each fresh constant introduced; a larger
+pool means more OR-branch alternatives at every subsequent node, increasing
+the exponential base at each level of the search.  First-order logic is in
+general undecidable~\cite{church1936entscheidungsproblem}, so a sound proof
+procedure must be a semi-decision procedure: when a resource bound is reached
+without a proof, the prover cannot determine whether no proof exists or one
+exists but requires more resources, and so returns \textit{Unknown} rather
+than \textit{NotProvable}.
 
 \subsection{Proposed Algorithm}\label{sec:proposed}
 
@@ -177,32 +184,44 @@ kernel.
 
 \subsection{Expected Performance}\label{sec:hypothesis}
 
-We expect (F2) to be the dominant failure mode on provable benchmarks.
-TPTP provable problems frequently admit proofs at shallow depth, but the
-naive DFS commits to groups~4--5 quantifier instantiation before exhausting
-branching alternatives at the same level.  Each fresh witness widens the
-search tree (branching factor $b$ grows with the witness pool), and since
-the tree has $O(b^d)$ nodes at depth $d$, even moderate instantiation depth
-exhausts the time budget before backtracking reaches a shorter proof.
-Iterative deepening corrects this: by bounding depth at $d = 1, 2, \ldots$
-in sequence, the search explores the $O(b^d)$ tree at the current limit
-before allowing any depth-$d{+}1$ branch, guaranteeing that a proof of
-depth $k$ is found on iteration $k$.  The \texttt{id} engine should therefore
-account for the majority of additional solves.
+The two refinements attack the exponential search space from complementary
+directions: iterative deepening prunes by \emph{depth}, and the six-class
+priority schedule prunes by \emph{width}.
 
-The six-class schedule addresses (F1), which compounds (F2): each premature
-eigenconstant enlarges the visible-term pool, widening the $\forall L$/$\exists
-R$ candidate set for all subsequent iterations and slowing each deepening pass.
-Delaying eigenvariable introduction to after branching propositional rules
-(class 4 vs.\ group 2) reduces this widening.  The visible-first/fresh-fallback
-split of classes~5--6 provides a further tightening: the prover stays within
-the current term universe as long as possible, deferring symbol creation to
-when it is strictly necessary.
+Iterative deepening imposes an explicit depth cutoff at each iteration,
+discarding any branch that would require more than $d$ rule applications.
+This prevents the prover from descending into deep quantifier-instantiation
+chains before exhausting shallower alternatives, and guarantees that any
+proof of depth $k$ is found on iteration $k$.  Because this directly
+addresses the most common failure mode on provable benchmarks, the
+\texttt{id} engine alone should account for the majority of additional
+solves over \texttt{naive}.
+
+The six-class schedule reduces the effective branching factor at each
+node, limiting how wide the search tree can grow:
+
+\begin{itemize}
+  \item \textbf{Closing rules first (class~1):} a branch is terminated as
+    soon as possible, pruning the entire subtree beneath it.
+  \item \textbf{Invertible rules before branching (class~2 before class~3):}
+    non-branching reductions simplify the sequent before any AND-split
+    occurs, potentially enabling early closure and reducing the size of each
+    AND-branch sub-problem.
+  \item \textbf{Branching before eigenvariables (class~3 before class~4):}
+    propositional structure is resolved before any new symbol is introduced.
+    If a branch closes propositionally, the fresh eigenconstant is never
+    generated at all, keeping the visible term pool smaller for all
+    subsequent nodes.
+  \item \textbf{Visible witnesses before fresh (class~5 before class~6):}
+    the OR-branching factor at reusable quantifier choice points is bounded
+    by the current term pool rather than allowed to grow unboundedly; a
+    fresh symbol is only introduced as a last resort.
+\end{itemize}
 
 Together, both refinements should yield strictly more solves than either
-building block alone, with iterative deepening contributing the larger share
-and the priority schedule providing a consistent additional gain on problems
-with many quantified atoms.
+building block alone: iterative deepening recovers proofs that the baseline
+misses entirely due to depth, while the priority schedule reduces wasted
+work within each iteration by keeping the search tree narrower.
 
 \section{Implementation and Experiment}\label{sec:implementation}
 
