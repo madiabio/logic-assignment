@@ -1,0 +1,50 @@
+\subsubsection{TPTP.}
+Two subsets of the TPTP problem library~\cite{Sut17} are used. The first is a
+737-problem provable subset (FOF/THM), restricted to problems with 0--50 input
+formulae, 0--150 atoms, and no equality or arithmetic. The second is a
+204-problem counter-satisfiable subset (FOF/CSA) drawn from the same
+complexity bounds, in which each problem is known to have no proof because
+its negation is satisfiable. TPTP is the standard benchmark collection for ATP
+research, with problems drawn from diverse mathematical domains (set theory,
+geometry, algebra, synthetic logic) and assigned difficulty ratings by the CASC
+competition infrastructure. Restricting to FOF and excluding equality and
+arithmetic keeps both subsets within the ground-instantiation fragment
+implemented here. The two subsets together test both sides of the prover: the
+ability to find proofs and the ability to exhaust the search space and report
+\textit{NotProvable}.
+
+\subsubsection{FOLIO.}
+The FOLIO dataset~\cite{han2024folio} consists of natural-language reasoning
+problems in which human-authored premises about everyday scenarios are
+formalised as FOF axioms and a conclusion is posed as a conjecture. The
+validation split, comprising 280 generated FOF files (140 entailment/refutation
+pairs), is included as a second source. FOLIO provides a structural contrast to
+TPTP: problems arise from NLI annotation rather than mathematical proof, the
+predicate vocabulary is drawn from natural language (e.g.\
+\texttt{bornin}, \texttt{spendtimeplayingwith}), and the label distribution
+includes true, false, and uncertain cases. This tests whether the prover's
+behaviour generalises beyond abstract syntactic benchmarks to semantically
+grounded, multi-premise problems of the kind that arise in formal NLI.
+
+\subsubsection{AI-generated.}
+To complement the above, 202 synthetically generated FOF problems in
+TPTP format are included, one per file, across four tiers: \emph{easy} (32),
+\emph{medium} (60), \emph{hard} (60), and \emph{expert} (50). The majority are
+multi-formula files containing named axioms and a single conjecture.
+Three families are used. \emph{Implication chains} assert $p_0(a)$ and a
+sequence of $n$ universally quantified steps
+$\forall X.\,(p_i(X)\Rightarrow p_{i+1}(X))$, with the conjecture $p_n(a)$;
+$d$ structurally identical but irrelevant \emph{distractor} axioms of the same
+form are added, increasing the number of applicable quantifier rules at each
+proof step without contributing to any proof. Unprovable variants remove one
+link from the chain. \emph{Syllogisms} encode a class hierarchy over ten named
+predicates with a ground instance fact, testing multi-step universal
+instantiation. \emph{Quantifier alternation} problems are single conjectures
+drawn from classical $\forall/\exists$ validities and non-theorems: Drinker's
+paradox, Russell's diagonal, the converse Barcan formula, and the (unprovable)
+forward Barcan and $\exists\Rightarrow\forall$ inferences. Difficulty scales
+across tiers by simultaneously increasing proof depth ($n \in [2,15]$) and
+distractor count ($d \in [0,14]$). Because proof depth and distractor count are
+fixed and known for each problem, the dataset provides a controlled setting in
+which the effect of rule-selection quality and the step-budget cost of
+iterative-deepening restarts can be studied in isolation.

@@ -7,6 +7,7 @@
 \usepackage{booktabs}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{placeins}
 \usepackage{xcolor}
 \usepackage{hyperref}
 \renewcommand\UrlFont{\color{blue}\rmfamily}
@@ -14,9 +15,9 @@
 
 \begin{document}
 
-\title{Improvements to Backwards Proof Search with Iterative
+\title{Improvements to Backward Proof Search with Iterative
 Deepening and Rule Application Prioritisation}
-\titlerunning{Backwards Proof Search Improvements}
+\titlerunning{Backward Proof Search Improvements}
 
 \author{Madeline Abio}
 \institute{Griffith University, Gold Coast, QLD 4101, Australia}
@@ -28,48 +29,11 @@ Deepening and Rule Application Prioritisation}
 \input{sections/introduction.tex}
 
 \section{Background}\label{sec:background}
-
-\subsubsection{Sequent calculi.}
-A \emph{sequent} $\Gamma\vdash\Delta$ asserts that the conjunction of the
-formulae in $\Gamma$ entails the disjunction of the formulae in
-$\Delta$. Gentzen's classical sequent calculus
-LK~\cite{gentzen1935untersuchungen} introduces logical connectives by pairs
-of left- and right-introduction rules. A \emph{derivation tree} is a tree of
-sequents whose root is the sequent to be proved and whose leaves are
-\emph{axioms} closed by structural rules such as identity. The variant
-LK$'$ used in Hou~\cite{hou2021fundamentals} differs from LK by making the
-quantifier rules $\forall L$ and $\exists R$ \emph{reusable}: the original
-quantified formula is retained on its side of the sequent after
-instantiation, so a single $\forall x.\,A$ on the left can produce the
-instantiated formulae $A[t_1/x], A[t_2/x],\ldots$ along the same branch.
-
-\subsubsection{Backward proof search.}
-\emph{Backward} (or \emph{root-first}) search begins from the goal sequent
-and applies the inverse of the inference rules until every leaf is closed
-by a structural rule. For propositional connectives the rules of LK$'$ are
-invertible, so the order of decomposition does not affect provability;
-quantifier rules, however, branch over either an eigenconstant
-($\forall R$, $\exists L$) or a witness term ($\forall L$, $\exists R$).
-Choice of witness term is the principal source of search-space explosion.
-Tableau-based provers such as leanTAP~\cite{beckert1995leantap} address
-this by free-variable instantiation and unification at branch closure;
-connection-based provers such as leanCoP~\cite{otten2003leancop} avoid
-explicit instantiation altogether. In this paper we stay within the
-ground-instantiation regime of Algorithm~2.
-
-\subsubsection{Iterative deepening.}
-Korf~\cite{korf1985iterative} showed that depth-first iterative-deepening
-(DFID) is asymptotically optimal in time, space, and solution-cost on
-exponentially branching search trees. The technique runs depth-bounded DFS
-at increasing depth limits$1, 2, 3, \ldots$, paying a small re-traversal
-overhead in exchange for breadth-first-like solution ordering and bounded
-memory. The technique is standard in heuristic search and is the basis of
-our first improvement.
+\input{sections/background.tex}
 
 \section{Proposed Approach}\label{sec:approach}
 
-\subsection{Baseline: Algorithm 2}\label{sec:baseline}
-
+\subsection{Baseline: Naive Backward Search}\label{sec:baseline}
 Algorithm~\ref{alg:naive} in this report reproduces the na\"ive
 backward proof-search procedure of
 Hou~\cite[p.~67]{hou2021fundamentals}, restated in our
@@ -96,6 +60,12 @@ revisited. A na\"ive depth-first loop therefore commits to deep
 instantiation chains before backtracking to easier alternatives.
 
 \subsection{Proposed Algorithm}
+
+We now present our proposed algorithm, which combines iterative
+deepening with a six-class priority schedule to address the failure
+modes identified above. The algorithm maintains the core backward
+proof-search structure while reordering rule application to delay
+expensive quantifier instantiations and avoid deep branching chains.
 
 \input{pseudocode/priority_id_algorithm}
 
@@ -137,149 +107,17 @@ witnesses remain to be tried, preserving soundness.
 
 Our proposed prover \texttt{priority-id} combines both building blocks:
 it uses the six-class priority schedule inside an iterative-deepening
-envelope. We use the iterative-deepening-only ablation \texttt{id} and
-the unmodified \texttt{naive} engine as controls. All three share the
+envelope. Two control engines are used for comparison: \texttt{id},
+which applies iterative deepening without the priority schedule, and
+\texttt{naive}, the unmodified baseline. All three share the
 same parser, rule applicators, fresh-name generators, branch-state
 bookkeeping, timeout machinery, and result persistence; they differ only
 in the search engine that orders rule application.
 
 \section{Implementation and Experiment}\label{sec:implementation}
 
-\subsection{Implementation}
-
-The prover is written in Rust~\cite{rust2024} (edition~2024) and consists
-of approximately 4{,}500 lines of source code spread over a parser,
-abstract-syntax tree, sequent representation, rule applicators, search
-engine, and a CLI front-end. The parser is built with
-\texttt{pest}~\cite{pest2024}, a parsing-expression-grammar generator,
-against a hand-written grammar for the first-order-form (FOF) fragment of
-the TPTP language~\cite{Sut17}. The CLI uses
-\texttt{clap}~\cite{clap2024} for argument parsing and
-\texttt{rusqlite}~\cite{rusqlite2024} for persisting per-problem results
-to a SQLite database. Cancellation under \texttt{Ctrl+C} is handled by the
-\texttt{ctrlc} crate. The three search engines (\texttt{naive},
-\texttt{id}, \texttt{priority-id}) are selected at the command line and
-share all code outside the rule scheduler.
-
-Two design points warrant mention. First, the LK$'$-reusable rules
-$\forall L$ and $\exists R$ retain the original quantified formula on its
-side of the sequent after instantiation, so the prover tracks per-branch
-quantifier-instantiation history (which terms have been used for which
-quantified occurrence) to avoid trying the same instantiation twice on the
-same branch. Second, fresh-name generation for both eigenconstants
-($\forall R$, $\exists L$) and fallback witnesses ($\forall L$, $\exists R$)
-inspects every symbol currently visible in the sequent and returns a name
-not in that set, guaranteeing eigenvariable freshness without further
-$\alpha$-renaming machinery. Substitution is capture-avoiding by
-construction because only ground terms are ever instantiated for bound
-variables.
-
-\subsection{Experimental setup}
-
-All benchmarks were run on a single laptop (Windows~11 Home, Intel x86\_64,
-Rust~1.85). Each prover invocation was given a 1\,000\,ms wall-clock
-timeout, a recursive search-depth limit of 128, a step limit of
-10\,000 rule applications, and a fresh-fallback budget of one term per
-quantified occurrence. Results were persisted to a SQLite database; the
-analysis pipeline (Python~3.12 with \texttt{pandas} and
-\texttt{matplotlib}) selects, for each engine, the canonical run with the
-greatest number of recorded results, after asserting that all selected
-runs share identical timeout, depth, step, and budget settings.
-
-\subsection{Dataset}
-
-We evaluate on a 737-problem subset of the TPTP problem
-library~\cite{Sut17}, drawn from the FOF/THM problems with
-0--50 input formulae, 0--150 atoms, and no equality or arithmetic. The
-present evaluation reports results for the \emph{provable} class only;
-extending the evaluation to unprovable and mixed classes is in progress
-and will be reported separately.
-
-\subsection{Results}
-
-Table~\ref{tab:summary} reports the headline outcome counts. Within the
-1\,000\,ms budget the baseline \texttt{naive} engine closes
-160 of 737 problems (21.7\,\%); iterative deepening alone closes 209
-(28.4\,\%); the combined \texttt{priority-id} prover closes 215
-(29.2\,\%). The \texttt{naive} engine also produces the only two
-\textit{Unknown} outcomes attributable to depth-bound exhaustion, a
-symptom of failure mode~(F2): the depth-first envelope dives into a deep
-quantifier-instantiation chain before exploring shallower alternatives,
-and reaches the depth limit on problems that the iterative-deepening
-engines close in milliseconds.
-
-\begin{table}[t]
-  \centering
-  \caption{Per-engine outcomes on the 737-problem provable TPTP subset
-  (timeout 1\,000\,ms, depth 128, steps 10\,000, fresh-fallback budget 1).}
-  \label{tab:summary}
-  \begin{tabular}{lrrrrrr}
-    \toprule
-    Engine & Solved & Solve\,\% & Timeout & Bicond.\,cap & Steps & Depth \\
-    \midrule
-    \texttt{naive}        & 160 & 21.7 & 562 & 12 & 1 & 2 \\
-    \texttt{id}           & 209 & 28.4 & 515 & 12 & 1 & 0 \\
-    \texttt{priority-id}  & 215 & 29.2 & 509 & 12 & 1 & 0 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{figure}[t]
-  \centering
-  \begin{minipage}{0.49\textwidth}
-    \centering
-    \includegraphics[width=\textwidth]{figures/outcome_composition.pdf}\\
-    \small (a) Outcome composition.
-  \end{minipage}\hfill
-  \begin{minipage}{0.49\textwidth}
-    \centering
-    \includegraphics[width=\textwidth]{figures/solve_time_cdf.pdf}\\
-    \small (b) Solve-time CDF (log scale).
-  \end{minipage}\\[0.6em]
-  \begin{minipage}{0.49\textwidth}
-    \centering
-    \includegraphics[width=\textwidth]{figures/solve_rate_by_atoms.pdf}\\
-    \small (c) Solve rate by atom count.
-  \end{minipage}\hfill
-  \begin{minipage}{0.49\textwidth}
-    \centering
-    \includegraphics[width=\textwidth]{figures/solve_rate_by_difficulty.pdf}\\
-    \small (d) Solve rate by TPTP rating.
-  \end{minipage}
-  \caption{Per-engine evaluation on the 737-problem provable TPTP subset.
-    \textbf{(a)}~Solved counts increase monotonically from \texttt{naive} to
-    \texttt{priority-id}; the bulk of the gain comes from the
-    iterative-deepening envelope. \textbf{(b)}~The \texttt{naive} engine
-    resolves the easiest problems fastest but saturates earlier; the
-    iterative-deepening engines continue to close problems past that point.
-    \textbf{(c)}~On atom-dense problems \texttt{priority-id} dominates the
-    \texttt{id} ablation, where the visible-terms-first schedule reduces
-    candidate instantiations. \textbf{(d)}~Solve rate decreases monotonically
-    with TPTP difficulty for all three engines; the relative ordering is
-  preserved across the rating range.}
-  \label{fig:eval}
-\end{figure}
-
-Figure~\ref{fig:eval}(a) visualises the same data as a stacked outcome
-composition: the proportions of \emph{biconditional-cap} and
-\emph{max-steps} unknowns are essentially identical across the three
-engines, confirming consistent configuration and that the differences in
-solve count come from search order alone. The CDF in
-Fig.~\ref{fig:eval}(b) exhibits the expected iterative-deepening
-trade-off: the \texttt{naive} engine has the lowest median solve time
-(2\,ms versus 7\,ms for \texttt{id} and 8\,ms for \texttt{priority-id})
-because depth-first DFS without re-traversal is cheaper on
-trivially-provable problems, but the iterative-deepening engines pay
-that small constant overhead in exchange for closing 49--55 more
-problems within the same wall-clock budget. Stratifying by atom count
-(Fig.~\ref{fig:eval}(c)) reveals that \texttt{priority-id} pulls ahead
-of the \texttt{id} ablation on the most atom-dense problems, where the
-priority schedule's preference for visible witnesses pays off. Finally,
-the TPTP-rating cross-validation in Fig.~\ref{fig:eval}(d) shows the
-expected monotonic decline and confirms that the relative ordering
-\texttt{priority-id} $>$ \texttt{id} $>$ \texttt{naive} holds across
-every difficulty bin, so the improvement is not driven by a handful of
-pathologically easy problems.
+\input{sections/implementation.tex}
+\input{sections/experimental_setup.tex}
 
 \section{Discussion and Conclusion}
 
@@ -315,7 +153,63 @@ unification) of mature first-order provers is brought to bear.
 Source code, benchmark scripts, and the SQLite database backing every
 figure in this paper are available at the project repository on GitHub.
 
+\FloatBarrier
 \bibliographystyle{splncs04}
 \bibliography{mybibliography}
+
+\appendix
+
+\section{Per-dataset outcome tables}\label{app:tables}
+
+Tables~\ref{tab:tptp-provable}--\ref{tab:ai-gen} give the full outcome
+breakdown for each dataset and engine. Outcomes are \textit{Provable},
+\textit{NotProvable} (NP), \textit{Timeout} (TO), and
+\textit{Unknown} (U).
+
+\begin{table}[h]
+  \centering
+  \caption{TPTP provable subset (737 problems).}
+  \label{tab:tptp-provable}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Engine & Provable & TO & U & Total \\
+    \midrule
+    \texttt{naive}       & 152 & 573 & 12 & 737 \\
+    \texttt{id}          & 199 & 526 & 12 & 737 \\
+    \texttt{priority-id} & 209 & 516 & 12 & 737 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{TPTP counter-satisfiable subset (151 problems).}
+  \label{tab:tptp-unprovable}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Engine & NP & TO & U & Total \\
+    \midrule
+    \texttt{naive}       & 4 & 143 & 4 & 151 \\
+    \texttt{id}          & 4 & 143 & 4 & 151 \\
+    \texttt{priority-id} & 4 & 142 & 5 & 151 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{AI-generated dataset (202 problems).}
+  \label{tab:ai-gen}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Engine & Provable & NP & TO & U & Total \\
+    \midrule
+    \texttt{naive}       & 22 & 4 & 168 & 8 & 202 \\
+    \texttt{id}          & 35 & 4 & 155 & 8 & 202 \\
+    \texttt{priority-id} & 38 & 4 & 152 & 8 & 202 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
 
 \end{document}

@@ -1,22 +1,25 @@
-The na\"ive backward proof-search procedure of the
-LK$'$ sequent calculus, as described by Algorithm~2 in Hou's
-textbook~\cite{hou2021fundamentals}, is a simple backtracking
-algorithm with an exponential search space and minimal heuristics.
-This investigation presents a Rust implementation of the baseline
-together with two algorithmic refinements: (i)~\emph{iterative
-deepening} of the depth-first search, so that shallow proofs are
-always discovered before deep ones; and (ii)~a six-class priority
-schedule for LK$'$ rules that prioritises rules that add the least
-amount of states to the search space. The combination of the two
-refinements forms the proposed prover. On a 737-problem provable
-subset of the TPTP library~\cite{Sut17}, the baseline na\"ive
-prover closes 152 problems within a one-second budget; iterative
-deepening alone closes 199 (+30.9\,\%); and the combined prover
-closes 209 (+37.5\,\%). The two refinements are complementary, and
-the bulk of the improvement is contributed by iterative deepening;
-the priority schedule contributes a smaller but consistent
-additional gain. This report also runs the prover on two other datasets,
-including FOLIO~\cite{han2024folio}.
+Automated theorem proving for first-order logic can be studied
+through sequent calculi, where a proof is built by repeatedly
+decomposing a goal sequent into simpler subgoals. This report
+investigates the backward proof-search algorithm for the pedagogical
+LK$'$ calculus, starting with a na\"ive backtracking prover that,
+while simple to implement and closely following the calculus, has a
+search space that grows quickly under rule choices, branching
+connectives, and quantified formulae. A Rust implementation was
+developed to evaluate two refinements: iterative deepening, which
+repeatedly runs depth-bounded search to find shallow proofs before
+deeper distractions, and a six-class rule priority schedule that
+attempts closing and low-branching rules before more expansive
+quantifier steps. On a 737-problem provable subset of the TPTP
+library~\cite{Sut17}, the baseline closes 152 problems within a
+one-second budget, iterative deepening closes 199, and the combined
+priority-ID prover closes 209---demonstrating that small control
+decisions matter significantly in proof search. While the logical
+rules define what is sound, the search strategy determines whether a
+proof is found within practical limits; iterative deepening produces
+most of the improvement by avoiding premature commitment to deep
+branches, while priority scheduling gives consistent but smaller
+benefits by delaying costly rule applications.
 
 \keywords{Sequent calculus \and LK$'$ \and Backward proof search \and
 Iterative deepening \and First-order logic \and TPTP.}

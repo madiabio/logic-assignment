@@ -1,0 +1,76 @@
+\subsection{Experimental setup}
+
+All benchmarks were run on a single laptop (Windows~11 Home, Intel x86\_64,
+Rust~1.85). Each prover invocation was given a 1\,000\,ms wall-clock
+timeout, a recursive search-depth limit of 128, a step limit of
+10\,000 rule applications, and a fresh-fallback budget of one term per
+quantified occurrence. Problems whose non-comment biconditional
+($\Leftrightarrow$) count exceeds six are skipped before parsing; this
+cap is a tunable engine parameter that prevents large biconditional
+chains from consuming proof-search resources disproportionate to the
+rest of the benchmark. Results were persisted to a SQLite database; the
+analysis pipeline (Python~3.12 with \texttt{pandas} and
+\texttt{matplotlib}) selects, for each engine, the canonical run with the
+greatest number of recorded results, after asserting that all selected
+runs share identical timeout, depth, step, and budget settings.
+
+\subsection{Datasets}
+
+Three datasets from different sources are used, covering standard ATP benchmarks,
+natural-language-derived problems, and synthetic controlled problems.
+
+\input{sections/dataset.tex}
+
+\subsection{Results}
+
+A problem is \emph{decided} when the prover returns a definitive
+answer---either \textit{Provable} or \textit{NotProvable}---as opposed
+to timing out or hitting a resource bound. Table~\ref{tab:summary}
+reports decided counts across both datasets.
+
+On the 888-problem TPTP benchmark (provable and counter-satisfiable
+combined), \texttt{naive} decides 156 problems (17.6\,\%),
+\texttt{id} decides 203 (22.9\,\%), and \texttt{priority-id} decides
+213 (24.0\,\%). The pattern holds on the 202-problem AI-generated set:
+\texttt{naive} decides 26 (12.9\,\%), \texttt{id} decides 39
+(19.3\,\%), and \texttt{priority-id} decides 42 (20.8\,\%). Across
+both datasets the two refinements are consistently additive: iterative
+deepening provides the larger gain, with the priority schedule
+contributing a smaller but consistent additional improvement.
+Per-dataset breakdowns by outcome type are given in
+Appendix~\ref{app:tables}.
+
+\begin{table}[t]
+  \centering
+  \caption{Decided problems per engine across both datasets
+  (timeout 1\,000\,ms, depth 128, steps 10\,000, fresh-fallback budget 1).
+  A problem is \emph{decided} when the prover returns \textit{Provable}
+  or \textit{NotProvable}.}
+  \label{tab:summary}
+  \begin{tabular}{lrrr}
+    \toprule
+    Engine & TPTP (888) & AI-gen. (202) & Total (1090) \\
+    \midrule
+    \texttt{naive}       & 156 (17.6\,\%) & 26 (12.9\,\%) & 182 (16.7\,\%) \\
+    \texttt{id}          & 203 (22.9\,\%) & 39 (19.3\,\%) & 242 (22.2\,\%) \\
+    \texttt{priority-id} & 213 (24.0\,\%) & 42 (20.8\,\%) & 255 (23.4\,\%) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\linewidth]{figures/tptp_combined_overview.pdf}
+  \caption{TPTP combined dataset (888 problems): outcome counts by engine
+  (left), decided vs.\ timeout vs.\ unknown (centre), and time to
+  conclusion on commonly decided problems, log scale (right).}
+  \label{fig:tptp-overview}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\linewidth]{figures/ai_generated_overview.pdf}
+  \caption{AI-generated dataset (202 problems): same layout as
+  Fig.~\ref{fig:tptp-overview}.}
+  \label{fig:ai-overview}
+\end{figure}

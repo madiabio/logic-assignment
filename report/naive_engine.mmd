@@ -2,29 +2,28 @@
 title: Naive Proof Engine
 ---
 flowchart LR
-    A["Goal sequent<br/>+ options"] --> B["prove_with_cancel"]
-    B --> C{"engine?"}
-    C -->|Naive| D["naive::run"]
+    IN["Goal sequent Γ ⊢ Δ"] --> RUN
 
-    subgraph N["Naive engine orchestration"]
-        D --> E["Fresh<br/>BranchState"]
-        E --> F["steps = 0"]
-        F --> G["Call<br/>backwards_search once"]
-        G --> H["Return<br/>ProofResult"]
+    subgraph ORQ["Naive orchestration — single pass"]
+        RUN["naive::run"] --> BS["backwards_search"]
+        BS --> RES["return result"]
     end
 
-    subgraph K["black-box collaborators"]
-        K1["backwards_search<br/>recursive DFS kernel"]
-        K2["Naive scheduler<br/>textbook groups"]
-        K3["ScheduledRule<br/>Standard or quantified"]
-        K2 --> K3
-        K1 -. calls .-> K2
-    end
+    BS -. calls .-> SCHED_START
 
-    G -. delegates to .-> K1
-    K1 -. outcome .-> H
+    subgraph SCHED["Naive scheduler — return first non-empty class"]
+        SCHED_START["collect applicable rules"]
+        C1["1. Closing  (id, ⊤R, ⊥L)"]
+        C2["2. Invertible + eigenvariable quantifiers  (∧L, ∨R, →R, ¬L, ¬R, ∀R, ∃L)"]
+        C3["3. Branching  (∧R, ∨L, →L)"]
+        C4["4. Reusable quantifiers  (∀L, ∃R) — visible terms, then fresh"]
+        SCHED_START --> C1 --> C2 --> C3 --> C4
+    end
 
     classDef engine fill:#eef6ff,stroke:#2b5d8a,stroke-width:1px;
-    classDef kernel fill:#f7f7f7,stroke:#333,stroke-width:2px;
-    class D,E,F,G,H engine;
-    class K1,K2,K3 kernel;
+    classDef sched fill:#fff7e6,stroke:#9a6b00,stroke-width:1px;
+    classDef result fill:#edf7ed,stroke:#2f7d32,stroke-width:1px;
+
+    class RUN,BS engine;
+    class SCHED_START,C1,C2,C3,C4 sched;
+    class RES result;

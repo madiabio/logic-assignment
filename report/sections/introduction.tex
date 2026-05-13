@@ -4,7 +4,7 @@ Automated theorem proving (ATP) for first-order logic (FOL) is a mature field
 with industrial-strength tools such as
 Vampire~\cite{kovacs2013vampire}, E~\cite{schulz2002E}, and the connection-based
 leanCoP~\cite{otten2003leancop}. These provers are heavily engineered and
-implement sophisticated techniques (resolution, superposition, 3indexing,
+implement sophisticated techniques (resolution, superposition, indexing,
 clause selection) that are far removed from the textbook sequent calculus
 introduced by Gentzen~\cite{gentzen1935untersuchungen}. The pedagogical
 LK$'$ calculus presented in Hou~\cite{hou2021fundamentals} sits at the other
@@ -14,8 +14,12 @@ pseudocode. The same simplicity that makes LK$'$ accessible, however, makes
 the na\"ive search strategy fragile: nothing prevents the prover from
 choosing an unhelpful rule order or descending into unbounded
 branching.
+Automated reasoning underlies applications from hardware verification
+to proof assistants, making the efficiency of search procedures a
+practical concern even for simple calculi.
 
-This paper revisits Algorithm~2 from a practical standpoint. We give a
+This paper revisits the naïve backward search procedure in
+Hou~\cite{hou2021fundamentals} from a practical standpoint. We give a
 faithful Rust implementation of the baseline, identify two failure modes,
 and propose two concrete algorithmic improvements that address them: a
 six-class \emph{priority schedule} that refines the ``\textbf{else if}''
