@@ -22,57 +22,8 @@ Deepening and Rule Application Prioritisation}
 \institute{Griffith University, Gold Coast, QLD 4101, Australia}
 
 \maketitle
-\begin{abstract}  The na\"ive backward proof-search procedure of the
-  LK$'$ sequent calculus, as  described by Algorithm~2 in Hou's
-  textbook~\cite{hou2021fundamentals}, is a simple backtracking
-  algorithm  with an exponential search space and minimal heuristics.
-  This  investigation presents a Rust implementation of the baseline
-  together with  two algorithmic refinements: (i)~\emph{iterative
-  deepening} of the depth-first  search, so that shallow proofs are
-  always discovered before deep ones; and  (ii)~a six-class priority
-  schedule for LK$'$ rules that prioritises  rules that add the least
-  amount of states to the search space. The  combination of the two
-  refinements forms the proposed  prover. On a 737-problem provable
-  subset of the TPTP  library~\cite{Sut17}, the baseline na\"ive
-  prover closes 152  problems within a one-second budget; iterative
-  deepening alone closes 199  (+30.9\,\%); and the combined prover
-  closes 209 (+37.5\,\%). The two  refinements are complementary, and
-  the bulk of the improvement is contributed  by iterative deepening;
-  the priority schedule contributes a smaller but  consistent
-  additional gain on harder problems.
-
-  \keywords{Sequent calculus \and LK$'$ \and Backward proof search \and
-  Iterative deepening \and First-order logic \and TPTP.}
-\end{abstract}
-
-
-\section{Introduction}
-
-Automated theorem proving (ATP) for first-order logic (FOL) is a mature field
-with industrial-strength tools such as
-Vampire~\cite{kovacs2013vampire}, E~\cite{schulz2002E}, and the connection-based
-leanCoP~\cite{otten2003leancop}. These provers are heavily engineered and
-implement sophisticated techniques (resolution, superposition, 3indexing,
-clause selection) that are far removed from the textbook sequent calculus
-introduced by Gentzen~\cite{gentzen1935untersuchungen}. The pedagogical
-LK$'$ calculus presented in Hou~\cite{hou2021fundamentals} sits at the other
-end of the spectrum: rules manipulate sequents directly, and a backward proof
-search procedure (Algorithm~2 in that text) can be stated in twenty lines of
-pseudocode. The same simplicity that makes LK$'$ accessible, however, makes
-the na\"ive search strategy fragile: nothing prevents the prover from
-choosing an unhelpful rule order or descending into unbounded
-branching.
-
-This paper revisits Algorithm~2 from a practical standpoint. We give a
-faithful Rust implementation of the baseline, identify two failure modes,
-and propose two concrete algorithmic improvements that address them: a
-six-class \emph{priority schedule} that refines the ``\textbf{else if}''
-chain of Algorithm~2 (Sect.~\ref{sec:approach}), and an
-\emph{iterative-deepening} envelope around the depth-first
-search~\cite{korf1985iterative}. An empirical evaluation on a 737-problem
-provable subset of TPTP shows that the combined prover closes 37.5\,\%
-more problems than the baseline within a one-second budget
-(Sect.~\ref{sec:implementation}).
+\input{sections/abstract.tex}
+\input{sections/introduction.tex}
 
 \section{Background}\label{sec:background}
 
@@ -117,39 +68,14 @@ our first improvement.
 
 \subsection{Baseline: Algorithm 2}\label{sec:baseline}
 
-Algorithm~\ref{alg:naive} reproduces the na\"ive backward proof-search
-procedure of Hou~\cite[p.~67]{hou2021fundamentals}, restated in our
+Algorithm~\ref{alg:naive} in this report reproduces the na\"ive
+backward proof-search procedure of
+Hou~\cite[p.~67]{hou2021fundamentals}, restated in our
 notation. The five priority groups are mutually exclusive: a higher-priority
 group is exhausted before any rule from a lower-priority group is
 considered.
 
-\begin{algorithm}[t]
-  \caption{Na\"ive backward proof search for LK$'$ (Algorithm~2 of
-  \cite{hou2021fundamentals})}\label{alg:naive}
-  \begin{algorithmic}[1]
-    \Require First-order formula $A$
-    \Ensure Derivation tree in LK$'$, or report no proof found
-    \State build the bottom sequent $\vdash A$
-    \ForAll{top sequents on an open branch}
-    \If{any of $\mathit{id}, \top R, \bot L$ is applicable}
-    \State apply the rule backwards and close the branch
-    \ElsIf{any of $\wedge L, \vee R, {\rightarrow}R, \neg L, \neg R,
-    \forall R, \exists L$ is applicable}
-    \State apply the rule backwards
-    \ElsIf{any of $\wedge R, \vee L, {\rightarrow}L$ is applicable}
-    \State apply the rule backwards and create a new branch
-    \ElsIf{$\forall L$ or $\exists R$ is applicable, and there is a
-      term $t$ that has not been used to instantiate the quantified
-    variable $x$ in this formula}
-    \State apply the rule backwards, substituting $x$ with $t$
-    \ElsIf{$\forall L$ or $\exists R$ is applicable}
-    \State apply the rule backwards and create a fresh term
-    \Else
-    \State stop
-    \EndIf
-    \EndFor
-  \end{algorithmic}
-\end{algorithm}
+\input{pseudocode/naive_alg}
 
 \subsection{Failure modes}
 We identify two structural weaknesses of Algorithm~\ref{alg:naive}.
@@ -168,31 +94,9 @@ revisited. A na\"ive depth-first loop therefore commits to deep
 instantiation chains before backtracking to easier alternatives.
 
 \subsection{Proposed Algorithm}
-\begin{algorithm}[t]
-  \caption{Improved backward proof search for LK$'$}\label{alg:improved}
-  \begin{algorithmic}[1]
-    \Require First-order formula $A$
-    \Ensure Derivation tree in LK$'$, or report no proof found
-    \State build the bottom sequent $\vdash A$
-    \ForAll{top sequents on an open branch}
-    \If{any of $\mathit{id}, \top R, \bot L$ is applicable}
-    \State apply the rule backwards and close the branch
-    \ElsIf{any of $\wedge L, \vee R, {\rightarrow}R, \neg L, \neg R,
-    \forall R, \exists L$ is applicable}
-    \State apply the rule backwards
-    \ElsIf{any of $\wedge R, \vee L, {\rightarrow}L$ is applicable}
-    \State apply the rule backwards and create a new branch
-    \ElsIf{$\forall L$ or $\exists R$ is applicable, and there is a
-    term $t$ that has not been used to instantiate $x$ in this formula}
-    \State apply the rule backwards, substituting $x$ with $t$
-    \ElsIf{$\forall L$ or $\exists R$ is applicable}
-    \State apply the rule backwards and create a fresh term
-    \Else
-    \State stop
-    \EndIf
-    \EndFor
-  \end{algorithmic}
-\end{algorithm}
+
+\input{pseudocode/priority_id_algorithm}
+
 \subsection{Building block A: iterative deepening}
 
 Our first refinement wraps the depth-first search of
