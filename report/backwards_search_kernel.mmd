@@ -1,0 +1,58 @@
+---
+title: Shared backwards_search Kernel
+---
+flowchart TD
+    A["backwards_search<br/>(one sequent)"] --> B{"stop?"}
+    B -->|cancel| C["Cancelled"]
+    B -->|timeout| D["Timeout"]
+    B -->|depth| E["Unknown<br/>depth"]
+    B -->|steps| F["Unknown<br/>steps"]
+    B -->|no| G["Increment<br/>steps"]
+
+    G --> H["Call selected<br/>scheduler"]
+    H --> I{"ScheduleResult"}
+    I -->|NoRules| J["NotProvable"]
+    I -->|QuantifierExhausted| K["Unknown<br/>quantifier budget"]
+    I -->|Rules| L["Try scheduled<br/>rules in order"]
+
+    subgraph R["Apply scheduled rule"]
+        L --> M["Clone<br/>branch state"]
+        M --> N{"ScheduledRule"}
+        N -->|Standard| O["Apply matched<br/>rule directly"]
+        N -->|ForAllL / ExistsR| P["Record term<br/>for occurrence"]
+        P --> Q["Apply quantified<br/>rule with term"]
+        Q --> S{"application"}
+        O --> S
+    end
+
+    S -->|Closed| T["Provable"]
+    S -->|NotImplemented| U["Merge<br/>failure"]
+    S -->|Error| V["Merge<br/>failure"]
+    S -->|Premises| W["Prove premises<br/>left to right"]
+
+    subgraph Pm["Premise handling"]
+        W --> X["Recursive call<br/>per premise"]
+        X --> Y{"premise<br/>outcome"}
+        Y -->|Provable| Z{"more?"}
+        Z -->|yes| X
+        Z -->|no| T
+        Y -->|not Provable| AA["Candidate<br/>fails"]
+    end
+
+    U --> AB{"dominates?"}
+    V --> AB
+    AA --> AB
+    AB -->|Timeout / Cancelled| AC["Return<br/>immediately"]
+    AB -->|ordinary failure| AD["Merge with<br/>best outcome"]
+    AD --> AE{"more<br/>rules?"}
+    AE -->|yes| L
+    AE -->|no| AF["Return best<br/>merged outcome"]
+
+    classDef stop fill:#ffecec,stroke:#a33,stroke-width:1px;
+    classDef work fill:#eef6ff,stroke:#2b5d8a,stroke-width:1px;
+    classDef sched fill:#fff7e6,stroke:#9a6b00,stroke-width:1px;
+    classDef result fill:#edf7ed,stroke:#2f7d32,stroke-width:1px;
+    class B,C,D,E,F stop;
+    class A,G,L,M,N,O,P,Q,S,W,X,Y,Z,AA,AB,AD,AE work;
+    class H,I,K sched;
+    class J,T,AC,AF result;

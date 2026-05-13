@@ -4,14 +4,14 @@ Generated TPTP FOF problems for benchmarking the theorem prover.
 
 ## Files
 
-- `easy.p` - 15 propositional logic problems (5-20 atoms)
-- `medium.p` - 30 first-order problems with universal quantifiers (20-50 atoms)
-- `hard.p` - 30 problems with nested quantifiers (50-100 atoms)
-- `expert.p` - 25 deeply nested complex problems (100-150 atoms)
+- `easy.p` - 30 propositional logic problems (5-20 atoms)
+- `medium.p` - 60 first-order problems with universal quantifiers (20-50 atoms)
+- `hard.p` - 60 problems with nested quantifiers (50-100 atoms)
+- `expert.p` - 50 deeply nested complex problems (100-150 atoms)
 
 ## Statistics
 
-- Total problems: 100+
+- Total problems: 200
 - Provable: 50/50 unprovable split
 - Format: TPTP FOF (.p files)
 
