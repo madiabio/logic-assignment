@@ -1,0 +1,27 @@
+---
+title: Priority Scheduling + Iterative Deepening Proof Search
+---
+flowchart TD
+    A[Input sequent] --> B[Preprocess / parse problem]
+    B --> C[Set global deadline = now + timeout]
+    C --> D[Set depth limit = 0]
+
+    D --> T{Global timeout / cancel?}
+    T -->|yes| H[Return Timeout / Cancelled]
+    T -->|no| S[Run bounded backward search]
+
+    S --> R[Find applicable rules]
+    R --> P[Select first non-empty priority class]
+    P --> Q[Try scheduled rules recursively]
+
+    Q --> E{Closed proof found?}
+    E -->|yes| F[Return Provable]
+
+    E -->|no| G{Timeout / cancel?}
+    G -->|yes| H
+
+    G -->|no| I{Depth limit exhausted?}
+    I -->|yes| J[Increase depth limit]
+    J --> T
+
+    I -->|no| K[Return Unknown / NotProvable if saturated]

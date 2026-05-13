@@ -1,0 +1,52 @@
+---
+title: Priority-ID Proof Engine
+---
+flowchart TD
+    A[prove_with_cancel(sequent, options)] --> B{engine}
+    B -->|PriorityId| C[iterative_deepening::run]
+    C --> D[Set steps_taken = 0]
+    D --> E[For depth_limit = 1 to max_depth]
+    E --> F{cancel requested?}
+    F -->|yes| X[Return Cancelled]
+    F -->|no| G{deadline reached?}
+    G -->|yes| Y[Return Timeout]
+    G -->|no| H[Copy options and set max_depth = depth_limit]
+    H --> I[Create fresh BranchState]
+    I --> J[Run backwards_search at depth 0]
+
+    subgraph ID[Iterative-deepening control]
+        J --> K{outcome}
+        K -->|Unknown: MaxDepthExceeded| L[Increase depth_limit and restart from root]
+        L --> E
+        K -->|Provable| M[Return Provable]
+        K -->|NotProvable| N[Return NotProvable]
+        K -->|Timeout/Cancelled| O[Return operational stop]
+        K -->|Step budget or quantifier budget unknown| P[Return Unknown]
+        E -->|no depth limit remains| Q[Return Unknown: MaxDepthExceeded]
+    end
+
+    subgraph BS[Shared backwards_search kernel used inside each depth limit]
+        J --> R[Check cancel, deadline, depth limit, and cumulative step limit]
+        R --> S[Increment cumulative steps_taken]
+        S --> T[Find all applicable rules]
+        T --> U[Priority scheduler: return first non-empty LK-priority class]
+        U --> U1[1. Closing: Id, TopR, BottomL]
+        U --> U2[2. Non-branching propositional: AndL, OrR, ImpliesR, NotL, NotR]
+        U --> U3[3. Branching propositional: AndR, OrL, ImpliesL]
+        U --> U4[4. Eigenvariable quantifiers: ForAllR, ExistsL]
+        U --> U5[5. Reusable quantifiers with unused visible terms: ForAllL, ExistsR]
+        U --> U6[6. Reusable quantifiers with one fresh fallback term: ForAllL, ExistsR]
+        U --> V{schedule result}
+        V -->|NoRules| N
+        V -->|QuantifierExhausted| P
+        V -->|Rules| W[Try scheduled rules in order]
+        W --> Z[Clone BranchState for candidate]
+        Z --> AA[Apply rule; record quantifier key, term, and fresh flag when needed]
+        AA --> AB{application result}
+        AB -->|Closed| M
+        AB -->|Premises| AC[Recursively prove every premise]
+        AC --> J
+        AB -->|NotImplemented/Error| AD[Merge into best failure and try next rule]
+        AC -->|non-provable premise| AD
+        AD --> W
+    end

@@ -1,0 +1,45 @@
+---
+title: Naive Proof Engine
+---
+flowchart TD
+    A[prove_with_cancel sequent options] --> B{engine}
+    B -->|Naive| C[naive run]
+    C --> D[Create fresh BranchState]
+    D --> E[Set steps_taken to 0]
+    E --> F[backwards_search at depth 0]
+
+    subgraph K[Shared backwards_search kernel]
+        F --> G{cancel requested?}
+        G -->|yes| X[Return Cancelled]
+        G -->|no| H{deadline reached?}
+        H -->|yes| Y[Return Timeout]
+        H -->|no| I{depth exceeds max_depth?}
+        I -->|yes| Z[Return Unknown MaxDepthExceeded]
+        I -->|no| J{steps exceed max_steps?}
+        J -->|yes| AA[Return Unknown MaxStepsExceeded]
+        J -->|no| L[Increment steps_taken]
+        L --> M[Find applicable rules]
+        M --> N[Naive scheduler first non-empty priority group]
+        N --> N1[1 Closing Id TopR BottomL]
+        N --> N2[2 Non-branching AndL OrR ImpliesR NotL NotR ForAllR ExistsL]
+        N --> N3[3 Branching AndR OrL ImpliesL]
+        N --> N4[4 Reusable quantifiers ForAllL ExistsR]
+        N4 --> N5[Try unused visible terms then one fresh fallback if budget remains]
+        N --> O{schedule result}
+        O -->|NoRules| P[Return NotProvable]
+        O -->|QuantifierExhausted| Q[Return Unknown QuantifierBudgetExceeded]
+        O -->|Rules| R[Try scheduled rules in order]
+        R --> S[Clone BranchState for candidate]
+        S --> T[Apply rule and update quantifier state if needed]
+        T --> U{application result}
+        U -->|Closed| V[Return Provable]
+        U -->|Premises| W[Prove each premise left to right]
+        W --> F
+        U -->|NotImplemented or Error| AB[Merge into best failure]
+        W -->|all premises provable| V
+        W -->|first non-provable outcome| AC[Merge or return if Timeout or Cancelled]
+        AB --> AD{more scheduled rules?}
+        AC --> AD
+        AD -->|yes| R
+        AD -->|no| AE[Return best merged outcome]
+    end
