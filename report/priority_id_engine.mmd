@@ -1,38 +1,50 @@
 ---
 title: Priority-ID Proof Engine
 ---
-flowchart TD
-    A["Goal sequent<br/>+ options"] --> B["prove_with_cancel"]
-    B --> C{"engine?"}
-    C -->|PriorityId| D["iterative_deepening::run"]
+flowchart LR
+    IN["Goal sequent S₀"] --> ID_START
 
-    subgraph ID["Priority-ID orchestration"]
-        D --> E["steps = 0<br/>cumulative"]
-        E --> F["Try depth<br/>1..max_depth"]
-        F --> G{"cancelled<br/>or timed out?"}
-        G -->|yes| H["Return<br/>operational stop"]
-        G -->|no| I["Set current<br/>depth limit"]
-        I --> J["Fresh<br/>BranchState"]
-        J --> K["Call<br/>backwards_search"]
-        K --> L{"outcome"}
-        L -->|Depth bound hit| M["Increase depth<br/>restart root"]
-        M --> F
-        L -->|Other outcome| N["Return<br/>immediately"]
-        F -->|no depth remains| O["Unknown<br/>depth bound"]
+    subgraph ID["Iterative Deepening"]
+        ID_START["d = 1"] --> CALL["Search(S₀, 0, d)"]
+        CALL -->|DepthExceeded| NEXT["d = d + 1"]
+        NEXT -->|d ≤ D| CALL
+        NEXT -->|d > D| OUT2["DepthExceeded"]
+        CALL -->|Provable / NotProvable| OUT1["return result"]
     end
 
-    subgraph BS["black-box collaborators"]
-        B1["backwards_search<br/>recursive DFS kernel"]
-        B2["LK-priority scheduler<br/>six classes"]
-        B3["ScheduledRule<br/>Standard or quantified"]
-        B2 --> B3
-        B1 -. calls .-> B2
+    subgraph SR["Search(S, depth, limit)"]
+        SA{"depth > limit?"} -->|yes| SB["DepthExceeded"]
+        SA -->|no| SC["PrioritySchedule(S)"]
+        SC -->|∅| SD["NotProvable"]
+        SC -->|rules R| SE["apply r backwards to S"]
+        SE -->|closes branch| SF["Provable"]
+        SE -->|premises P₁..Pₖ| SG["Search each Pᵢ recursively"]
+        SG -->|all Provable| SF
+        SG -->|fail| SH{"more rules?"}
+        SH -->|yes| SE
+        SH -->|no| SD
     end
 
-    K -. delegates to .-> B1
-    B1 -. outcome .-> L
+    CALL -. delegates to .-> SA
+    SC -. calls .-> PS_START
 
-    classDef engine fill:#eef6ff,stroke:#2b5d8a,stroke-width:1px;
-    classDef kernel fill:#f7f7f7,stroke:#333,stroke-width:2px;
-    class D,E,F,G,H,I,J,K,L,M,N,O engine;
-    class B1,B2,B3 kernel;
+    subgraph PS["PrioritySchedule(S) — return first non-empty class"]
+        PS_START["collect all applicable rules"]
+        P1["1. Axioms  (id, ⊤R, ⊥L)"]
+        P2["2. Invertible unary  (∧L, ∨R, →R, ¬L, ¬R)"]
+        P3["3. Invertible binary  (∧R, ∨L, →L)"]
+        P4["4. Non-reusable quantifiers  (∀R, ∃L)"]
+        P5["5. Reusable quantifiers with branch terms  (∀L, ∃R)"]
+        P6["6. Reusable quantifiers with fresh term  (∀L, ∃R)"]
+        PS_START --> P1 --> P2 --> P3 --> P4 --> P5 --> P6
+    end
+
+    classDef result fill:#edf7ed,stroke:#2f7d32,stroke-width:1px;
+    classDef stop fill:#ffecec,stroke:#a33,stroke-width:1px;
+    classDef sched fill:#fff7e6,stroke:#9a6b00,stroke-width:1px;
+    classDef work fill:#eef6ff,stroke:#2b5d8a,stroke-width:1px;
+
+    class SF,OUT1 result;
+    class SB,SD,OUT2 stop;
+    class P1,P2,P3,P4,P5,P6,PS_START sched;
+    class SA,SC,SE,SG,SH,ID_START,CALL,NEXT work;
