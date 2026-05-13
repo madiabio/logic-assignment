@@ -1,7 +1,7 @@
 ---
 title: Naive Proof Engine
 ---
-flowchart TD
+flowchart LR
     A["Goal sequent<br/>+ options"] --> B["prove_with_cancel"]
     B --> C{"engine?"}
     C -->|Naive| D["naive::run"]
