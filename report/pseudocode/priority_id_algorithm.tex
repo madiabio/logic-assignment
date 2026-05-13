@@ -4,91 +4,50 @@
 \begin{algorithm}[t]
   \caption{Priority-ID backward proof search for LK$'$}\label{alg:priority-id}
   \begin{algorithmic}[1]
-    \Require Goal sequent $S_0$, maximum depth $D$, maximum steps $N$,
-      timeout deadline $T$, fresh-term budget $F$
-    \Ensure \textsc{Provable}, \textsc{NotProvable}, or a bounded-failure status
-    \State $steps \gets 0$
-    \For{$d \gets 1$ \textbf{to} $D$}
-      \If{cancel requested}
-        \State \Return \textsc{Cancelled}
-      \EndIf
-      \If{current time $\geq T$}
-        \State \Return \textsc{Timeout}
-      \EndIf
-      \State $state \gets$ empty branch-local quantifier history
-      \State $outcome \gets \Call{Search}{S_0, state, 0, d, steps, N, T, F}$
-      \If{$outcome = \textsc{UnknownDepth}$}
-        \State \textbf{continue}
-      \Else
-        \State \Return $outcome$
+    \Require Goal sequent $S_0$, maximum depth $D$
+    \Ensure \textsc{Provable}, \textsc{NotProvable}, or \textsc{DepthExceeded}
+
+    \For{$d \gets 1$ \textbf{to} $D$} \Comment{try increasing depth budgets}
+      \State $result \gets \Call{Search}{S_0,\; 0,\; d}$
+      \If{$result \neq \textsc{DepthExceeded}$}
+        \State \Return $result$
       \EndIf
     \EndFor
-    \State \Return \textsc{UnknownDepth}
+    \State \Return \textsc{DepthExceeded}
 
-    \Function{Search}{$S, state, depth, limit, steps, N, T, F$}
-      \If{cancel requested}
-        \State \Return \textsc{Cancelled}
-      \EndIf
-      \If{current time $\geq T$}
-        \State \Return \textsc{Timeout}
-      \EndIf
+    \Function{Search}{$S,\; depth,\; limit$}
       \If{$depth > limit$}
-        \State \Return \textsc{UnknownDepth}
+        \State \Return \textsc{DepthExceeded}
       \EndIf
-      \If{$steps \geq N$}
-        \State \Return \textsc{UnknownSteps}
-      \EndIf
-      \State $steps \gets steps + 1$
-      \State $R \gets \Call{PrioritySchedule}{S, state, F}$
+      \State $R \gets \Call{PrioritySchedule}{S}$
       \If{$R = \emptyset$}
-        \State \Return \textsc{NotProvable}
+        \State \Return \textsc{NotProvable} \Comment{no rule applies}
       \EndIf
-      \If{$R = \textsc{QuantifierExhausted}$}
-        \State \Return \textsc{UnknownQuantifierBudget}
-      \EndIf
-      \State $best \gets \textsc{NotProvable}$
-      \ForAll{scheduled rule $r \in R$}
-        \State $state' \gets state$
-        \If{$r$ instantiates $\forall L$ or $\exists R$ with term $t$}
-          \State record $(r.occurrence, t, r.isFresh)$ in $state'$
-        \EndIf
-        \State $app \gets$ apply $r$ backwards to $S$
-        \If{$app$ closes the branch}
+      \ForAll{rule $r \in R$}
+        \State $\mathit{premises} \gets$ apply $r$ backwards to $S$
+        \If{$\mathit{premises} = \emptyset$} \Comment{axiom: branch closed immediately}
           \State \Return \textsc{Provable}
-        \ElsIf{$app$ produces premises $P_1,\ldots,P_k$}
-          \ForAll{$P_i$ in order}
-            \State $child \gets \Call{Search}{P_i, state', depth+1, limit, steps, N, T, F}$
-            \If{$child \neq \textsc{Provable}$}
-              \State $best \gets \Call{MergeOutcome}{best, child}$
-              \State \textbf{break}
-            \EndIf
-          \EndFor
-          \If{all premises returned \textsc{Provable}}
-            \State \Return \textsc{Provable}
-          \EndIf
-        \Else
-          \State $best \gets \Call{MergeOutcome}{best, app.status}$
         \EndIf
-        \If{$best$ is \textsc{Timeout} or \textsc{Cancelled}}
-          \State \Return $best$
+        \If{$\forall P \in \mathit{premises}: \Call{Search}{P,\; depth+1,\; limit} = \textsc{Provable}$}
+          \State \Return \textsc{Provable}
         \EndIf
       \EndFor
-      \State \Return $best$
+      \State \Return \textsc{NotProvable}
     \EndFunction
 
-    \Function{PrioritySchedule}{$S, state, F$}
-      \State $M \gets$ all structurally applicable LK$'$ rule matches in $S$
-      \State return the first non-empty class from the following ordered list:
-      \Statex \hspace{1em}1. $id$, $\top R$, $\bot L$
-      \Statex \hspace{1em}2. $\wedge L$, $\vee R$, $\rightarrow R$, $\neg L$, $\neg R$
-      \Statex \hspace{1em}3. $\wedge R$, $\vee L$, $\rightarrow L$
-      \Statex \hspace{1em}4. $\forall R$, $\exists L$
-      \Statex \hspace{1em}5. $\forall L$, $\exists R$ using unused visible branch terms
-      \Statex \hspace{1em}6. $\forall L$, $\exists R$ using one fresh fallback term if $F$ permits
-      \If{a reusable quantifier matched but classes 5 and 6 are empty}
-        \State \Return \textsc{QuantifierExhausted}
-      \EndIf
-      \State \Return $\emptyset$
+    \Function{PrioritySchedule}{$S$}
+      \State Collect all applicable LK$'$ rule instances from $S$.
+      \State Return the \textbf{first non-empty} class from the ordered list below.
+      \Statex
+      \Statex \textbf{1.} Axioms: $\mathit{id}$,\; $\top R$,\; $\bot L$
+      \Statex \textbf{2.} Invertible, non-branching: $\wedge L$,\; $\vee R$,\; $\to R$,\; $\neg L$,\; $\neg R$
+      \Statex \textbf{3.} Invertible, branching: $\wedge R$,\; $\vee L$,\; $\to L$
+      \Statex \textbf{4.} Non-reusable quantifiers: $\forall R$,\; $\exists L$
+      \Statex \textbf{5.} Reusable quantifiers ($\forall L$,\; $\exists R$) with terms already on the branch
+      \Statex \textbf{6.} Reusable quantifiers ($\forall L$,\; $\exists R$) with one new fresh term
+      \Statex
+      \State \Return $\emptyset$ if no class has a match.
     \EndFunction
+
   \end{algorithmic}
 \end{algorithm}
