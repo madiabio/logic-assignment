@@ -1,0 +1,4 @@
+Dataset,Engine,Gathered,Timeout,Unknown,Total
+tptp_combined,naive,156,716,16,888
+tptp_combined,id,203,669,16,888
+tptp_combined,priority-id,213,658,17,888
