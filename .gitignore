@@ -34,12 +34,12 @@ Springer_Lecture_Notes_in_Computer_Science.zip
 *.snm
 *.vrb
 
-# Generated PDFs (optional)
 *.pdf
 
-# Editor/temp files
 *.swp
 *.tmp
 *~
 MPTPTP2078/
 docs/
+
+textbook.pdf
