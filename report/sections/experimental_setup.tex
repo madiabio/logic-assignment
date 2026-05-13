@@ -1,76 +1,111 @@
-\subsection{Experimental setup}
+\subsection{Experimental Setup}
 
-All benchmarks were run on a single laptop (Windows~11 Home, Intel x86\_64,
-Rust~1.85). Each prover invocation was given a 1\,000\,ms wall-clock
-timeout, a recursive search-depth limit of 128, a step limit of
-10\,000 rule applications, and a fresh-fallback budget of one term per
-quantified occurrence. Problems whose non-comment biconditional
-($\Leftrightarrow$) count exceeds six are skipped before parsing; this
-cap is a tunable engine parameter that prevents large biconditional
-chains from consuming proof-search resources disproportionate to the
-rest of the benchmark. Results were persisted to a SQLite database; the
-analysis pipeline (Python~3.12 with \texttt{pandas} and
-\texttt{matplotlib}) selects, for each engine, the canonical run with the
-greatest number of recorded results, after asserting that all selected
+All benchmarks were run on a single machine: Windows~11 Home
+(Version~10.0.26200, Build~26200), Intel Core Ultra~7~258V (8~cores,
+x86-64), 32\,GB RAM, Rust~1.85. Each prover invocation was given a
+1{,}000\,ms wall-clock timeout, a recursive search-depth limit of 128, a
+step limit of 10{,}000 rule applications, and a fresh-fallback budget of
+one term per quantified occurrence. Problems whose non-comment biconditional
+($\Leftrightarrow$) count exceeds six are skipped before parsing; this cap
+prevents large biconditional chains from consuming proof-search resources
+disproportionate to the rest of the benchmark. Results were persisted to a
+SQLite database; the analysis pipeline (Python~3.12 with \texttt{pandas}
+and \texttt{matplotlib}) selects, for each engine, the canonical run with
+the greatest number of recorded results, after asserting that all selected
 runs share identical timeout, depth, step, and budget settings.
 
 \subsection{Datasets}
 
-Three datasets from different sources are used, covering standard ATP benchmarks,
+Three datasets are used, covering standard ATP benchmarks,
 natural-language-derived problems, and synthetic controlled problems.
 
 \input{sections/dataset.tex}
 
 \subsection{Results}
 
-A problem is \emph{decided} when the prover returns a definitive
-answer---either \textit{Provable} or \textit{NotProvable}---as opposed
-to timing out or hitting a resource bound. Table~\ref{tab:summary}
-reports decided counts across both datasets.
-
-On the 888-problem TPTP benchmark (provable and counter-satisfiable
-combined), \texttt{naive} decides 156 problems (17.6\,\%),
-\texttt{id} decides 203 (22.9\,\%), and \texttt{priority-id} decides
-213 (24.0\,\%). The pattern holds on the 202-problem AI-generated set:
-\texttt{naive} decides 26 (12.9\,\%), \texttt{id} decides 39
-(19.3\,\%), and \texttt{priority-id} decides 42 (20.8\,\%). Across
-both datasets the two refinements are consistently additive: iterative
-deepening provides the larger gain, with the priority schedule
-contributing a smaller but consistent additional improvement.
-Per-dataset breakdowns by outcome type are given in
-Appendix~\ref{app:tables}.
+A problem is \emph{decided} when the prover returns \textit{Provable} or
+\textit{NotProvable}, as opposed to timing out or hitting a resource bound.
+Table~\ref{tab:summary} reports decided counts across all datasets.
 
 \begin{table}[t]
   \centering
-  \caption{Decided problems per engine across both datasets
-  (timeout 1\,000\,ms, depth 128, steps 10\,000, fresh-fallback budget 1).
+  \caption{Decided problems per engine across all datasets
+  (timeout 1{,}000\,ms, depth 128, steps 10{,}000, fresh-fallback budget 1).
   A problem is \emph{decided} when the prover returns \textit{Provable}
   or \textit{NotProvable}.}
   \label{tab:summary}
-  \begin{tabular}{lrrr}
+  \begin{tabular}{lrrrr}
     \toprule
-    Engine & TPTP (888) & AI-gen. (202) & Total (1090) \\
+    Engine & TPTP (888) & FOLIO (280) & AI-gen.\ (202) & Total (1370) \\
     \midrule
-    \texttt{naive}       & 156 (17.6\,\%) & 26 (12.9\,\%) & 182 (16.7\,\%) \\
-    \texttt{id}          & 203 (22.9\,\%) & 39 (19.3\,\%) & 242 (22.2\,\%) \\
-    \texttt{priority-id} & 213 (24.0\,\%) & 42 (20.8\,\%) & 255 (23.4\,\%) \\
+    \texttt{naive}       & 156 (17.6\,\%) & 57 (20.4\,\%) & 26 (12.9\,\%) & 239 (17.4\,\%) \\
+    \texttt{id}          & 203 (22.9\,\%) & 57 (20.4\,\%) & 39 (19.3\,\%) & 299 (21.8\,\%) \\
+    \texttt{priority-id} & 213 (24.0\,\%) & 66 (23.6\,\%) & 42 (20.8\,\%) & 321 (23.4\,\%) \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\begin{figure}
+\begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{figures/tptp_combined_overview.pdf}
   \caption{TPTP combined dataset (888 problems): outcome counts by engine
-  (left), decided vs.\ timeout vs.\ unknown (centre), and time to
-  conclusion on commonly decided problems, log scale (right).}
+    (left), decided vs.\ timeout vs.\ unknown breakdown (centre), and
+    time to conclusion on commonly decided problems, log scale (right).}
   \label{fig:tptp-overview}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/folio_overview.pdf}
+  \caption{FOLIO validation set (280 problems): same layout as
+    Fig.~\ref{fig:tptp-overview}.}
+  \label{fig:folio-overview}
+\end{figure}
+
+\begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{figures/ai_generated_overview.pdf}
   \caption{AI-generated dataset (202 problems): same layout as
-  Fig.~\ref{fig:tptp-overview}.}
+    Fig.~\ref{fig:tptp-overview}.}
   \label{fig:ai-overview}
 \end{figure}
+
+On the TPTP benchmark (Figure~\ref{fig:tptp-overview}), \texttt{naive}
+decides 156 problems, \texttt{id} decides 203 ($+30\,\%$), and
+\texttt{priority-id} decides 213 ($+36\,\%$ over \texttt{naive}). All
+additional solves come from the provable subset; the four
+counter-satisfiable decisions are shared by all three engines. The
+log-scale timing panel shows that \texttt{id} and \texttt{priority-id}
+not only solve problems \texttt{naive} cannot reach, but also solve the
+shared problems faster on average, reflecting fewer wasted steps in
+dead-end branches.
+
+The FOLIO results (Figure~\ref{fig:folio-overview}) reveal a different
+pattern. \texttt{naive} and \texttt{id} both decide 57 problems, yet
+\texttt{id} shifts 6 problems from \textit{NotProvable} to
+\textit{Provable}: iterative deepening explores shallower paths before the
+deeper dead ends that \texttt{naive}'s DFS commits to first, recovering
+proofs \texttt{naive} missed. However, \texttt{id} also produces more
+\textit{Unknown} outcomes (25 vs.\ 19 for \texttt{naive}): the repeated
+restarts of iterative deepening consume the step budget on problems that
+timeout in \texttt{naive}, converting them to step-limited \textit{Unknown}
+rather than wall-clock timeouts. \texttt{priority-id} breaks out of this
+trade-off, raising decided problems to 66 and reducing \textit{Unknown} to
+10 by spending fewer steps per iteration on unproductive branches.
+
+On the AI-generated dataset (Figure~\ref{fig:ai-overview}), \texttt{naive}
+decides 26 problems, \texttt{id} decides 39 ($+50\,\%$), and
+\texttt{priority-id} decides 42. The larger relative gain of \texttt{id}
+here compared to TPTP reflects the controlled structure of the dataset:
+implication-chain and syllogism problems have known short proofs that the
+naive DFS consistently misses by descending into distractor-quantifier
+chains, making depth-bounding particularly effective. All three engines
+agree on all four \textit{NotProvable} decisions.
+
+Across all datasets the two refinements are consistently additive.
+Iterative deepening provides the larger gain on TPTP and AI-generated
+problems, where shallow proofs exist but are blocked by deep quantifier
+instantiation. The priority schedule drives the net improvement on FOLIO,
+where its more disciplined use of the step budget converts undecided
+problems into definitive outcomes. Per-dataset breakdowns by outcome type
+are given in Appendix~\ref{app:tables}.
