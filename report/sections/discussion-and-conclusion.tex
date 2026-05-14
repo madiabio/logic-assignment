@@ -51,12 +51,13 @@ by any engine. The 139 problems in the provable subset with rating above
 easiest tier of the TPTP benchmark.
 
 \textbf{Recursive depth bound.} The backward search is implemented as
-direct Rust recursion with a software depth counter, bounded at 128 rule
-applications (\texttt{max\_depth} in \texttt{ProofOptions}). Any proof
-requiring more than 128 sequential rule applications returns
-\textit{Unknown} regardless of time or step budget. Proofs requiring
-deeper search are therefore structurally unreachable under the current
-implementation.
+direct Rust recursion, so the call stack grows with proof depth.
+\texttt{max\_depth} is a tunable parameter, but it cannot be raised
+arbitrarily: beyond a modest limit the OS call stack overflows and the
+process terminates. Any proof requiring more sequential rule applications
+than the configured bound returns \textit{Unknown} regardless of time or
+step budget, making deeper proofs structurally unreachable without
+switching to an iterative (stack-explicit) implementation.
 
 \textbf{Comparison with mature systems.} The prover is not competitive with
 connection-based systems (leanCoP~\cite{otten2003leancop},
@@ -71,12 +72,6 @@ sequent calculus, not a production ATP system.
 \textbf{Lemma sharing.} Iterative deepening re-traverses all branches at
 each depth increment. Caching closed subgoals across iterations would
 amortise this re-traversal cost without altering the proof strategy.
-
-\textbf{Smarter witness selection.} The reusable-quantifier classes
-currently enumerate witnesses by position in the sequent. Unification-based
-instantiation, as in leanTAP~\cite{beckert1995leantap}, selects witnesses
-guided by the conjecture structure, dramatically reducing the branching
-factor at quantifier steps.
 
 \textbf{Alternative proof strategies.} The long-term path to competitive
 performance is a structural change away from backward sequent search.
@@ -93,9 +88,9 @@ disproportionate improvements in practical solve rate. Iterative deepening
 and the six-class LK$'$ priority schedule together raise the number of
 decided problems from 239 to 321 across three diverse datasets, without any
 change to the underlying proof calculus or the addition of heavyweight
-machinery. The bottleneck that remains is search-space width, and the
-natural successors to this work are unification-based witness selection and
-a transition to connection-based or saturation-based proof strategies.
+machinery. The bottleneck that remains is search-space width, and the natural
+successors to this work are lemma sharing and a transition to
+connection-based or saturation-based proof strategies.
 
 \subsubsection{Data Availability.}
 Source code, benchmark scripts, and the SQLite database backing every
