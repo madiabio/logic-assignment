@@ -36,7 +36,7 @@ Table~\ref{tab:summary} reports decided counts across all datasets.
   \label{tab:summary}
   \begin{tabular}{lrrrr}
     \toprule
-    Engine & TPTP (888) & FOLIO (280) & AI-gen.\ (202) & Total (1370) \\
+    Engine & TPTP (888) & FOLIO (280) & Synthetic (202) & Total (1370) \\
     \midrule
     \texttt{naive}       & 156 (17.6\,\%) & 57 (20.4\,\%) & 26 (12.9\,\%) & 239 (17.4\,\%) \\
     \texttt{id}          & 203 (22.9\,\%) & 57 (20.4\,\%) & 39 (19.3\,\%) & 299 (21.8\,\%) \\
@@ -65,14 +65,14 @@ Table~\ref{tab:summary} reports decided counts across all datasets.
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{figures/ai_generated_overview.pdf}
-  \caption{AI-generated dataset (202 problems): same layout as
+  \caption{Synthetic dataset (202 problems): same layout as
     Fig.~\ref{fig:tptp-overview}.}
   \label{fig:ai-overview}
 \end{figure}
 
 On the TPTP benchmark (Figure~\ref{fig:tptp-overview}), \texttt{naive}
 decides 156 problems, \texttt{id} decides 203 ($+30\,\%$), and
-\texttt{priority-id} decides 213 ($+36\,\%$ over \texttt{naive}). All
+\texttt{priority-id} decides 213 ($+37\,\%$ over \texttt{naive}). All
 additional solves come from the provable subset; the four
 counter-satisfiable decisions are shared by all three engines. The
 log-scale timing panel shows that \texttt{id} and \texttt{priority-id}
@@ -81,29 +81,67 @@ shared problems faster on average, reflecting fewer wasted steps in
 dead-end branches.
 
 The FOLIO results (Figure~\ref{fig:folio-overview}) reveal a different
-pattern. \texttt{naive} and \texttt{id} both decide 57 problems, yet
-\texttt{id} shifts 6 problems from \textit{NotProvable} to
-\textit{Provable}: iterative deepening explores shallower paths before the
-deeper dead ends that \texttt{naive}'s DFS commits to first, recovering
-proofs \texttt{naive} missed. However, \texttt{id} also produces more
-\textit{Unknown} outcomes (25 vs.\ 19 for \texttt{naive}): the repeated
-restarts of iterative deepening consume the step budget on problems that
-timeout in \texttt{naive}, converting them to step-limited \textit{Unknown}
-rather than wall-clock timeouts. \texttt{priority-id} breaks out of this
-trade-off, raising decided problems to 66 and reducing \textit{Unknown} to
-10 by spending fewer steps per iteration on unproductive branches.
+pattern. \texttt{naive} and \texttt{id} both decide 57 problems, but with
+a shifted composition: \texttt{naive} returns 34~\textit{Provable} and
+23~\textit{NotProvable}, while \texttt{id} returns 40~\textit{Provable}
+and 17~\textit{NotProvable}. These are not the same problems. \texttt{id}
+finds 11 proofs that \texttt{naive} timed out on, but loses 5 proofs that
+\texttt{naive} found --- iterative deepening's repeated restarts exhaust
+the step budget before those branches close. Simultaneously, \texttt{id}
+converts 6 of \texttt{naive}'s \textit{NotProvable} decisions to
+\textit{Unknown}: the restarts prevent the search from fully exhausting
+those spaces, so problems \texttt{naive} certified as unprovable become
+undecided under \texttt{id}. The net result is a coincidental wash at 57
+decided problems. \texttt{priority-id} resolves this trade-off by spending
+fewer steps per iteration on unproductive branches. It decides 66
+problems (38~\textit{Provable} and 28~\textit{NotProvable}), converting
+11 of \texttt{id}'s \textit{Unknown} and \textit{Timeout} outcomes to
+\textit{NotProvable} --- the more disciplined step budget allows those
+search spaces to be fully exhausted --- and reducing \textit{Unknown} from
+25 to 10.
 
-On the AI-generated dataset (Figure~\ref{fig:ai-overview}), \texttt{naive}
-decides 26 problems, \texttt{id} decides 39 ($+50\,\%$), and
-\texttt{priority-id} decides 42. The larger relative gain of \texttt{id}
-here compared to TPTP reflects the controlled structure of the dataset:
-implication-chain and syllogism problems have known short proofs that the
-naive DFS consistently misses by descending into distractor-quantifier
-chains, making depth-bounding particularly effective. All three engines
-agree on all four \textit{NotProvable} decisions.
+On the synthetic dataset (Figure~\ref{fig:ai-overview}), \texttt{naive}
+decides 26 problems, \texttt{id} decides 39 ($+50\,\%$ over
+\texttt{naive}), and \texttt{priority-id} decides 42 ($+62\,\%$ over
+\texttt{naive}). The tier breakdown
+(Figure~\ref{fig:synthetic-tier}, Table~\ref{tab:synthetic-tier}) shows
+where these gains arise. On medium-tier problems \texttt{naive} decides
+10 of 60, \texttt{id} decides 19, and \texttt{priority-id} decides 20.
+On hard-tier problems \texttt{naive} decides none, while \texttt{id} and
+\texttt{priority-id} decide 3 and 5 respectively. No engine decides any
+expert-tier problem. The gains are concentrated in implication-chain and
+syllogism families; all 43 transitivity-chain problems are unsolved by
+every engine, as the repeated-reuse proof strategy those problems require
+exhausts the available step budget at all depth limits tested.
+Figure~\ref{fig:synthetic-depth} plots solve rate against chain depth for
+implication-chain problems, confirming that \texttt{naive}'s solve rate
+collapses beyond depth~4 while \texttt{id} and \texttt{priority-id}
+maintain non-zero solve rates into the hard tier. This is the controlled
+signature of F2: the naive DFS descends into distractor-quantifier chains
+at every step, making chain depth the dominant cost factor, while
+iterative deepening recovers the short proofs that DFS bypasses. All
+three engines agree on all four \textit{NotProvable} decisions.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/ai_generated_tier_breakdown.pdf}
+  \caption{Synthetic dataset (202 problems): decided problems per engine
+    at each difficulty tier. The dashed line marks the total number of
+    problems in that tier.}
+  \label{fig:synthetic-tier}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/ai_generated_depth_solve_rate.pdf}
+  \caption{Solve rate vs.\ chain depth for implication-chain problems.
+    Each point is the fraction of problems at that depth decided by the
+    engine; depth is the number of $\forall L$ steps required.}
+  \label{fig:synthetic-depth}
+\end{figure}
 
 Across all datasets the two refinements are consistently additive.
-Iterative deepening provides the larger gain on TPTP and AI-generated
+Iterative deepening provides the larger gain on TPTP and synthetic
 problems, where shallow proofs exist but are blocked by deep quantifier
 instantiation. The priority schedule drives the net improvement on FOLIO,
 where its more disciplined use of the step budget converts undecided

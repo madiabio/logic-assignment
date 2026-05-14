@@ -31,6 +31,11 @@ Deepening and Rule Application Prioritisation}
 \input{sections/background.tex}
 
 \input{sections/proposed-approach.tex}
+
+\section{Implementation and Experiment}\label{sec:implementation}
+
+\input{sections/implementation.tex}
+\input{sections/experimental_setup.tex}
 \input{sections/discussion-and-conclusion.tex}
 
 \FloatBarrier
@@ -44,7 +49,8 @@ Deepening and Rule Application Prioritisation}
 Tables~\ref{tab:tptp-provable}--\ref{tab:ai-gen} give the full outcome
 breakdown for each dataset and engine. Outcomes are \textit{Provable},
 \textit{NotProvable} (NP), \textit{Timeout} (TO), and
-\textit{Unknown} (U).
+\textit{Unknown} (U). Table~\ref{tab:synthetic-tier} gives the
+per-tier decided counts for the synthetic dataset.
 
 \begin{table}[h]
   \centering
@@ -78,7 +84,7 @@ breakdown for each dataset and engine. Outcomes are \textit{Provable},
 
 \begin{table}[h]
   \centering
-  \caption{AI-generated dataset (202 problems).}
+  \caption{Synthetic dataset (202 problems).}
   \label{tab:ai-gen}
   \begin{tabular}{lrrrrr}
     \toprule
@@ -91,6 +97,21 @@ breakdown for each dataset and engine. Outcomes are \textit{Provable},
   \end{tabular}
 \end{table}
 
+
+\begin{table}[h]
+  \centering
+  \caption{Synthetic dataset: decided problems per engine by difficulty tier.}
+  \label{tab:synthetic-tier}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Engine & Easy (32) & Medium (60) & Hard (60) & Expert (50) \\
+    \midrule
+    \texttt{naive}       & 16 & 10 &  0 & 0 \\
+    \texttt{id}          & 17 & 19 &  3 & 0 \\
+    \texttt{priority-id} & 17 & 20 &  5 & 0 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \begin{figure}[h]
   \centering
