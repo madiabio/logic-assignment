@@ -3,16 +3,20 @@
 All benchmarks were run on a single machine: Windows~11 Home
 (Version~10.0.26200, Build~26200), Intel Core Ultra~7~258V (8~cores,
 x86-64), 32\,GB RAM, Rust~1.85. Each prover invocation was given a
-1{,}000\,ms wall-clock timeout, a recursive search-depth limit of 128, a
-step limit of 10{,}000 rule applications, and a fresh-fallback budget of
-one term per quantified occurrence. Problems whose non-comment biconditional
+1{,}000\,ms wall-clock timeout, a recursive search-depth limit of 128, and
+a fresh-fallback budget of one term per quantified occurrence. For the TPTP
+and FOLIO datasets a step limit of 10{,}000 rule applications was also
+imposed. For the synthetic dataset the step limit was set to effectively
+unlimited (10$^{11}$), with the wall-clock timeout as the sole binding
+resource constraint; an initial run with 10{,}000 steps produced too few
+decisions on synthetic problems to be informative, so the limit was
+raised. Problems whose non-comment biconditional
 ($\Leftrightarrow$) count exceeds six are skipped before parsing; this cap
 prevents large biconditional chains from consuming proof-search resources
-disproportionate to the rest of the benchmark. Results were persisted to a
-SQLite database; the analysis pipeline (Python~3.12 with \texttt{pandas}
-and \texttt{matplotlib}) selects, for each engine, the canonical run with
-the greatest number of recorded results, after asserting that all selected
-runs share identical timeout, depth, step, and budget settings.
+disproportionate to the rest of the benchmark. Results were persisted to SQLite databases; the analysis pipeline
+(Python~3.12 with \texttt{pandas} and \texttt{matplotlib}) loads all
+results directly, as each database contains exactly one run per engine at
+identical parameter settings.
 
 \subsection{Datasets}
 
@@ -30,7 +34,8 @@ Table~\ref{tab:summary} reports decided counts across all datasets.
 \begin{table}[t]
   \centering
   \caption{Decided problems per engine across all datasets
-  (timeout 1{,}000\,ms, depth 128, steps 10{,}000, fresh-fallback budget 1).
+  (timeout 1{,}000\,ms, depth 128, fresh-fallback budget 1;
+  steps 10{,}000 for TPTP and FOLIO, effectively unlimited for synthetic).
   A problem is \emph{decided} when the prover returns \textit{Provable}
   or \textit{NotProvable}.}
   \label{tab:summary}
@@ -86,7 +91,7 @@ a shifted composition: \texttt{naive} returns 34~\textit{Provable} and
 23~\textit{NotProvable}, while \texttt{id} returns 40~\textit{Provable}
 and 17~\textit{NotProvable}. These are not the same problems. \texttt{id}
 finds 11 proofs that \texttt{naive} timed out on, but loses 5 proofs that
-\texttt{naive} found --- iterative deepening's repeated restarts exhaust
+\texttt{naive} found: iterative deepening's repeated restarts exhaust
 the step budget before those branches close. Simultaneously, \texttt{id}
 converts 6 of \texttt{naive}'s \textit{NotProvable} decisions to
 \textit{Unknown}: the restarts prevent the search from fully exhausting
@@ -96,8 +101,8 @@ decided problems. \texttt{priority-id} resolves this trade-off by spending
 fewer steps per iteration on unproductive branches. It decides 66
 problems (38~\textit{Provable} and 28~\textit{NotProvable}), converting
 11 of \texttt{id}'s \textit{Unknown} and \textit{Timeout} outcomes to
-\textit{NotProvable} --- the more disciplined step budget allows those
-search spaces to be fully exhausted --- and reducing \textit{Unknown} from
+\textit{NotProvable} (the more disciplined step budget allows those
+search spaces to be fully exhausted), and reducing \textit{Unknown} from
 25 to 10.
 
 On the synthetic dataset (Figure~\ref{fig:ai-overview}), \texttt{naive}
@@ -111,8 +116,9 @@ On hard-tier problems \texttt{naive} decides none, while \texttt{id} and
 \texttt{priority-id} decide 3 and 5 respectively. No engine decides any
 expert-tier problem. The gains are concentrated in implication-chain and
 syllogism families; all 43 transitivity-chain problems are unsolved by
-every engine, as the repeated-reuse proof strategy those problems require
-exhausts the available step budget at all depth limits tested.
+every engine: every invocation times out, as the repeated-reuse proof
+strategy required by those problems does not terminate within the
+1{,}000\,ms wall-clock limit.
 Figure~\ref{fig:synthetic-depth} plots solve rate against chain depth for
 implication-chain problems, confirming that \texttt{naive}'s solve rate
 collapses beyond depth~4 while \texttt{id} and \texttt{priority-id}

@@ -192,10 +192,11 @@ Iterative deepening imposes an explicit depth cutoff at each iteration,
 discarding any branch that would require more than $d$ rule applications.
 This prevents the prover from descending into deep quantifier-instantiation
 chains before exhausting shallower alternatives, and guarantees that any
-proof of depth $k$ is found on iteration $k$.  Because this directly
-addresses the most common failure mode on provable benchmarks, the
-\texttt{id} engine alone should account for the majority of additional
-solves over \texttt{naive}.
+decision of depth $k$ (whether \textit{Provable} or \textit{NotProvable})
+is found on iteration $k$.  The \texttt{id} engine should therefore
+account for the majority of additional solves over \texttt{naive}, as it
+directly addresses the inability of depth-first search to reach short
+proofs when deeper branches are explored first.
 
 The six-class schedule reduces the effective branching factor at each
 node, limiting how wide the search tree can grow:

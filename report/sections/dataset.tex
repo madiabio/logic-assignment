@@ -4,34 +4,30 @@ Two subsets of the TPTP problem library~\cite{Sut17} are used. The first is a
 formulae, 0--150 atoms, and no equality or arithmetic. The second is a
 204-problem counter-satisfiable subset (FOF/CSA) drawn from the same
 complexity bounds, in which each problem is known to have no proof because
-its negation is satisfiable. TPTP is the standard benchmark collection for ATP
-research, with problems drawn from diverse mathematical domains (set theory,
-geometry, algebra, synthetic logic) and assigned difficulty ratings by the CASC
-competition infrastructure. Restricting to FOF and excluding equality and
-arithmetic keeps both subsets within the ground-instantiation fragment
-implemented here. The two subsets together test both sides of the prover: the
-ability to find proofs and the ability to exhaust the search space and report
-\textit{NotProvable}.
+its negation is satisfiable. TPTP was chosen because it provides a large
+number of problems with known satisfiability status across diverse mathematical
+domains, with well-established filters (such as the TPTP2T tool) that make it
+straightforward to select subsets matching the implemented fragment. The two
+subsets together test both sides of the prover: the ability to find proofs and
+the ability to exhaust the search space and report \textit{NotProvable}.
 
 \subsubsection{FOLIO.}
 The FOLIO dataset~\cite{han2024folio} consists of natural-language reasoning
 problems in which human-authored premises about everyday scenarios are
 formalised as FOF axioms and a conclusion is posed as a conjecture. The
 validation split, comprising 280 generated FOF files (140 entailment/refutation
-pairs), is included as a second source. FOLIO provides a structural contrast to
-TPTP: problems arise from NLI annotation rather than mathematical proof, the
-predicate vocabulary is drawn from natural language (e.g.\
-\texttt{bornin}, \texttt{spendtimeplayingwith}), and the label distribution
-includes true, false, and uncertain cases. This tests whether the prover's
-behaviour generalises beyond abstract syntactic benchmarks to semantically
-grounded, multi-premise problems of the kind that arise in formal NLI.
+pairs), is included to evaluate the prover on a dataset with less controlled
+filtering than TPTP, testing whether its behaviour generalises to
+semantically grounded, natural-language-derived problems.
 
 \subsubsection{Synthetic.}
 To complement the above, 202 synthetic FOF problems in TPTP format were
 generated programmatically using a purpose-built Python script
 (\texttt{scripts/generate\_fof\_benchmarks.py}), distributed one per file
 across four tiers: \emph{easy} (32), \emph{medium} (60), \emph{hard} (60),
-and \emph{expert} (50).
+and \emph{expert} (50). Synthetic problems were used to provide direct control
+over difficulty, since both proof depth and distractor count are fixed by
+construction for every problem.
 
 Four problem families are used. \textbf{Implication chains} consist of a
 ground fact $p_0(a)$, a sequence of $n$ universally quantified steps
@@ -60,14 +56,3 @@ Y.\,p(Y))$ inferences.
 
 Difficulty scales across tiers by simultaneously increasing proof depth
 ($n\in[2,15]$) and distractor count ($d\in[0,14]$).
-
-Unlike TPTP and FOLIO, where proof depth and branching structure are
-unknown a priori, every synthetic problem has its chain length and
-distractor count fixed by construction. This separation of variables
-enables controlled analysis of the mechanisms described in
-Sect.~\ref{sec:approach}: chain depth isolates whether iterative
-deepening recovers proofs that DFS misses, while distractor count
-isolates whether the priority schedule reduces wasted work at each
-node. The two real-world datasets establish ecological validity; the
-synthetic dataset enables attribution of observed gains to specific
-algorithmic improvements.
