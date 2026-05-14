@@ -1,20 +1,36 @@
 \section{Discussion}
 
-The three-engine design attributes gains directly: \texttt{id} adds only
-iterative deepening, \texttt{priority-id} adds only the six-class
-schedule on top of \texttt{id}, and all other code is shared. Iterative
-deepening contributes 60 of the 82 additional decisions over the baseline
-(73\,\%); the priority schedule contributes the remaining 22 (27\,\%).
+The shared-kernel design (Sect.~\ref{sec:proposed}) lets us attribute the
+82 gained decisions over the baseline to specific failure modes rather
+than to engine identity. Iterative deepening alone accounts for 60 of
+those 82 (73\,\%), implicating (F2), unbounded reusable instantiation,
+as the dominant bottleneck on these datasets. The priority schedule
+contributes the remaining 22 (27\,\%) on top of \texttt{id}, so (F1) is
+real but secondary in volume.
 
-FOLIO is an attribution outlier: \texttt{id} ties \texttt{naive} at 57
-because every conversion to \textit{Provable} is offset by another
-decision regressing, so all 9 additional FOLIO decisions come from the
-priority schedule rather than from iterative deepening.
+FOLIO complicates an additive reading. Iterative deepening alone ties
+the baseline (57\,=\,57): every \textit{Provable} it gains is offset by
+another decision regressing. Adding the priority schedule on top
+recovers the regressions and converts 11 of \texttt{id}'s
+\textit{Unknown}/\textit{Timeout} outcomes into \textit{NotProvable}.
+The two refinements are therefore not independent; depth bounds and
+rule scheduling interact, and iterative deepening's net benefit is
+contingent on the rule schedule it runs against.
 
-Roughly 70\,\% of problems remain undecided overall, dominated by
-timeouts rather than \textit{Unknown}: the bottleneck is search-space
-width, not raw time, and sharper rule-selection would help more than a
-larger resource budget.
+The synthetic results expose where these refinements stop helping. All
+43 transitivity-chain problems time out under every engine, because
+reusing one axiom across many witnesses defeats both depth-bounded
+search and priority ordering. The expert tier is undecided across the
+board, echoing TPTP behaviour above rating 0.10: the same structural
+weakness limits both real and synthetic input at the hard end.
+
+Roughly 70\,\% of problems remain undecided overall, but the residue is
+dominated by \textit{Timeout} rather than \textit{Unknown}; the
+implementation is not blocked by its resource bounds, it is blocked by
+the rate at which the search space grows under (F2). A wider envelope
+(longer timeouts, deeper recursion) would buy less than a structural
+change that prunes redundant witness instantiation, such as lemma
+sharing or a connection-based kernel.
 
 \section{Conclusion}
 
