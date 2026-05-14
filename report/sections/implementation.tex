@@ -1,29 +1,18 @@
-\subsection{Implementation}
+\section{Implementation}\label{sec:impl}
 
-The prover is written in Rust~\cite{rust2024} (edition~2024) and consists
-of approximately 4{,}500 lines of source code spread over a parser,
-abstract-syntax tree, sequent representation, rule applicators, search
-engine, and a CLI front-end. The parser uses
-\texttt{pest}~\cite{pest2024}, a parsing-expression-grammar library,
-against a hand-written grammar for the first-order-form (FOF) fragment of
-the TPTP language~\cite{Sut17}. The CLI uses \texttt{clap}~\cite{clap2024}
-for argument parsing, \texttt{rusqlite}~\cite{rusqlite2024} for persisting
-per-problem results to a SQLite database, and
-\texttt{ctrlc}~\cite{ctrlc2024} for graceful cancellation under
-\texttt{Ctrl+C}. The three search engines (\texttt{naive}, \texttt{id},
-\texttt{priority-id}) are selected at the command line and share all code
-outside the rule scheduler. The end-to-end pipeline is depicted in
-Figure~\ref{fig:sysarch} (Sect.~\ref{sec:sysarch}).
-
-Two design points warrant mention. First, the LK$'$-reusable rules
-$\forall L$ and $\exists R$ retain the original quantified formula on its
-side of the sequent after instantiation, so the prover tracks per-branch
-quantifier-instantiation history (which terms have been used for which
-quantified occurrence) to avoid trying the same instantiation twice on the
-same branch. Second, fresh-name generation for both eigenconstants
-($\forall R$, $\exists L$) and fallback witnesses ($\forall L$, $\exists R$)
-inspects every symbol currently visible in the sequent and returns a name
-not in that set, guaranteeing eigenvariable freshness without further
-$\alpha$-renaming machinery. Substitution is capture-avoiding by
-construction because only ground terms are ever instantiated for bound
-variables.
+The prover is written in Rust~\cite{rust2024} ($\sim$4{,}500 lines),
+using \texttt{pest}~\cite{pest2024} for FOF parsing,
+\texttt{clap}~\cite{clap2024} for the CLI,
+\texttt{rusqlite}~\cite{rusqlite2024} for result persistence, and
+\texttt{ctrlc}~\cite{ctrlc2024} for cancellation. Per-problem parallel
+evaluation uses \texttt{rayon}~\cite{rayon2024};
+\texttt{log}/\texttt{env\_logger}~\cite{log2024,envlogger2024} provide
+structured logging and \texttt{chrono}~\cite{chrono2024} timestamps
+SQLite rows. The three engines share all code outside the rule scheduler
+(Figure~\ref{fig:sysarch}). All benchmarks ran on Windows~11 Home (Intel
+Core Ultra~7~258V, 32\,GB RAM, Rust~1.85) with a 1{,}000\,ms wall-clock
+timeout, depth 128, and a per-occurrence fresh-fallback budget of one
+term; step limits were 10{,}000 for TPTP and FOLIO, and effectively
+unlimited ($10^{11}$) for synthetic. Problems with more than six
+biconditionals are skipped before parsing. Results were persisted to
+SQLite and analysed with Python~3.12.

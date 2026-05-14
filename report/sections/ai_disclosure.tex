@@ -1,0 +1,150 @@
+\section{Generative AI Use}\label{app:ai}
+
+Two AI tools were used heavily for code development. Where possible,
+queries are reproduced from session logs with minor typographical corrections
+for readability but are otherwise verbatim; those corrections were themselves
+made with Claude Sonnet 4.6 assistance.
+
+\textbf{Claude Sonnet~4.6} (Anthropic), accessed via the Claude Code
+command-line interface and web interface (\texttt{claude.ai/code}), was the
+primary tool. All Claude-assisted commits carry a
+\texttt{Co-Authored-By: Claude Sonnet~4.6} trailer that Claude Code
+automatically appends, providing verifiable attribution in the git history.
+The following queries and responses are reproduced from local Claude Code
+session logs (\texttt{.jsonl} files stored by the CLI); the
+priority-scheduler session (\S\ref{app:ai-scheduler}) was conducted via the
+web interface and is documented from commit trailers only, as no local log
+was retained.
+
+\textbf{OpenAI Codex} was also used during development for feature
+implementation, design discussion, and code-quality passes. Session logs were
+not retained for Codex interactions and Codex does not automatically tag
+commits, so specific queries cannot be reproduced.
+
+\subsection*{A.2.1\quad Iterative Deepening Engine (6 May 2026)}
+
+\textbf{Queries:}
+\begin{quote}
+  I want to implement an iterative deepening backwards search engine. The
+  feature may not need to be a full engine, but the idea is to use the clap CLI
+  args so the user can select via \texttt{--engine naive} or
+  \texttt{--engine id}.
+  I will be adding more optimisations later, but this is the starting point. The
+  current architecture should support iterative deepening. Here is
+  the algorithm:
+  [Algorithm~2, p.~67, Hou 2021, supplied as full \LaTeX\ pseudocode].
+\end{quote}
+
+\begin{quote}
+  I started an ultraplan session in the web browser and it began editing code.
+  I would like to continue from the CLI instead, using this plan:
+  [Plan: Iterative Deepening Backward Search Engine --- \texttt{--engine} flag,
+    \texttt{ProofOptions::engine} field, ID loop calling
+    \texttt{backwards\_search}
+  at increasing depth limits, \texttt{engine/id.rs} module].
+\end{quote}
+
+\begin{quote}
+  Please also make sure the engine can be configured in \texttt{config.toml},
+  that everything is documented appropriately, and that all relevant functions
+  have appropriate rustdocs.
+\end{quote}
+
+\textbf{Outcome:} Claude implemented the \texttt{--engine naive|id} CLI flag,
+\texttt{ProofOptions::engine} field, and the iterative-deepening loop in a new
+\texttt{engine/id.rs} submodule, adding rustdocs throughout
+(commits \texttt{d16bb3c} and associated engine-modularisation commits).
+
+\subsection*{A.2.2\quad SQLite Persistence (6 May 2026)}
+
+\textbf{Queries:}
+\begin{quote}
+  I need to make the results from each run for each engine persist so I can
+  analyse the data. How should I do this?
+\end{quote}
+
+\begin{quote}
+  SQLite would be preferable --- can we use that instead?
+\end{quote}
+
+\begin{quote}
+  The interface should be something like \texttt{--persist true} or
+  \texttt{--persist false}, defaulting to \texttt{true}, with the database
+  location configurable --- perhaps \texttt{--persist <DB\_FILE\_LOCATION>} with
+  a default path specified in \texttt{config.toml}.
+\end{quote}
+
+\begin{quote}
+  The CLI flag wiring should live in \texttt{cli/}, but the actual insertion
+  logic should be in its own module such as \texttt{src/persistence}.
+  What is your recommendation?
+\end{quote}
+
+\textbf{Outcome:} Claude designed and implemented the \texttt{src/persistence/}
+module with an SQLite schema, \texttt{--persist} CLI flag with configurable
+path, and a TDD test suite (commits \texttt{a8333b8}, \texttt{c5bc21f},
+\texttt{5719e21}, \texttt{ba06ddf}, \texttt{2ca6f0e}, \texttt{a1de674}).
+
+\subsection*{A.2.3\quad Six-Class Priority Scheduler (6 May
+2026)}\label{app:ai-scheduler}
+
+\textbf{Note:} This session was conducted via the Claude Code web interface;
+no local session log is available. The session is documented from the
+\texttt{Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>} trailers
+that Claude Code automatically appends to commits it helps author.
+
+\textbf{Outcome:} Claude implemented the six-class LK$'$ rule priority scheduler
+(closing rules; non-branching propositional; branching propositional;
+  eigenvariable quantifiers; reusable quantifiers with visible witnesses;
+reusable quantifiers with fresh fallback) and the \texttt{Priority} and
+\texttt{PriorityId} engine variants
+(commits \texttt{8d72635}, \texttt{663ac9a}, \texttt{d16bb3c}).
+
+\subsection*{A.2.4\quad FOLIO Rust Integration (9 May 2026)}
+
+\textbf{Queries:}
+\begin{quote}
+  I am happy to modify the prover so that it does not require a \texttt{.p}
+  file --- it can be adapted to accept whatever format is needed.
+  Please have a look at \texttt{theorem\_prover/} to determine the
+  best approach.
+\end{quote}
+
+\begin{quote}
+  Ensure every new function is appropriately documented with rustdocs, and
+  maintain appropriate separation of concerns across modules, files, and
+  functions. Create new submodules or files where needed to meet good software
+  design standards.
+\end{quote}
+
+\textbf{Outcome:} Claude extended the grammar and parser to accept FOLIO
+\texttt{.jsonl} problems directly without converting to TPTP \texttt{.p}
+format, adding a new parser module with full rustdoc coverage.
+
+\subsection*{A.2.5\quad Parallelisation and Channel-Based DB Writer
+(9 May 2026)}
+
+\textbf{Queries:}
+\begin{quote}
+  I would like to run problem files in parallel within
+  \texttt{theorem\_prover/}.
+  I am considering migrating persistence from SQLite to PostgreSQL to support
+  this, though I am not sure that is the right approach.
+\end{quote}
+
+\begin{quote}
+  For parallelisation: multiple files simultaneously within a single invocation.
+\end{quote}
+
+\begin{quote}
+  Out-of-order progress output is acceptable. Please implement this with TDD.
+  The timer logic can also be simplified, and the Ctrl-C handling can likely be
+  simplified now that the owner thread can terminate the workers directly.
+\end{quote}
+
+\textbf{Outcome:} Claude implemented \texttt{rayon} \texttt{par\_iter} over
+problem paths with an \texttt{AtomicUsize} progress counter, a channel-based
+SQLite writer thread to avoid connection-sharing across threads, and an
+exit-code fix (\texttt{process::exit} replaced with a return value to ensure
+the writer thread flushes before exit)
+(commits \texttt{c52a7bf}, \texttt{95cc45a}, \texttt{d48cc7b}).

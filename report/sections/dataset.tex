@@ -4,55 +4,27 @@ Two subsets of the TPTP problem library~\cite{Sut17} are used. The first is a
 formulae, 0--150 atoms, and no equality or arithmetic. The second is a
 204-problem counter-satisfiable subset (FOF/CSA) drawn from the same
 complexity bounds, in which each problem is known to have no proof because
-its negation is satisfiable. TPTP was chosen because it provides a large
-number of problems with known satisfiability status across diverse mathematical
-domains, with well-established filters (such as the TPTP2T tool) that make it
-straightforward to select subsets matching the implemented fragment. The two
-subsets together test both sides of the prover: the ability to find proofs and
-the ability to exhaust the search space and report \textit{NotProvable}.
+its negation is satisfiable. The two subsets together test both sides
+of the prover against problems with
+known status across diverse mathematical domains.
 
 \subsubsection{FOLIO.}
-The FOLIO dataset~\cite{han2024folio} consists of natural-language reasoning
-problems in which human-authored premises about everyday scenarios are
-formalised as FOF axioms and a conclusion is posed as a conjecture. The
-validation split, comprising 280 generated FOF files (140 entailment/refutation
-pairs), is included to evaluate the prover on a dataset with less controlled
-filtering than TPTP, testing whether its behaviour generalises to
-semantically grounded, natural-language-derived problems.
+The FOLIO dataset~\cite{han2024folio} provides 280 human-authored
+natural-language reasoning problems formalised as FOF, testing whether the
+prover's behaviour generalises beyond the controlled TPTP filter.
 
 \subsubsection{Synthetic.}
-To complement the above, 202 synthetic FOF problems in TPTP format were
-generated programmatically using a purpose-built Python script
-(\texttt{scripts/generate\_fof\_benchmarks.py}), distributed one per file
-across four tiers: \emph{easy} (32), \emph{medium} (60), \emph{hard} (60),
-and \emph{expert} (50). Synthetic problems were used to provide direct control
-over difficulty, since both proof depth and distractor count are fixed by
-construction for every problem.
-
-Four problem families are used. \textbf{Implication chains} consist of a
-ground fact $p_0(a)$, a sequence of $n$ universally quantified steps
-$\forall X.\,(p_i(X)\Rightarrow p_{i+1}(X))$, and the conjecture $p_n(a)$;
-the proof requires $n$ sequential $\forall L$ instantiations with the
-constant $a$.  $d$ structurally identical but irrelevant \emph{distractor}
-axioms of the same form are added, increasing the number of applicable
-quantifier rules at each step without contributing to any proof.  Unprovable
-variants remove one link from the chain, leaving an irreparable gap.
-\textbf{Syllogisms} encode a fixed class hierarchy
-(\texttt{entity}$\to$\texttt{organism}$\to\cdots\to$\texttt{teacher}) with
-a ground instance for one individual; unprovable variants change the
-individual in the conjecture to one for whom no ground fact exists.
-\textbf{Transitivity chains} provide a single binary transitivity axiom
-$\forall X,Y,Z.\,(\mathit{rel}(X,Y)\wedge\mathit{rel}(Y,Z)\Rightarrow
-\mathit{rel}(X,Z))$ together with a sequence of ground edge facts; unlike
-implication chains, the proof requires \emph{repeated reuse} of the same
-axiom across different instantiations. Unprovable variants ask for a node
-unreachable by the given edges. \textbf{Quantifier alternation} problems
-are single-formula conjectures testing classical $\forall/\exists$ theorems
-and non-theorems: Drinker's paradox~\cite{smullyan1978}, Russell's
-diagonal~\cite{russell1902}, the converse Barcan formula~\cite{barcan1946},
-Pelletier~18~\cite{pelletier1986}, and the (unprovable) forward Barcan
-formula~\cite{barcan1946} and $(\exists X.\,p(X))\Rightarrow(\forall
-Y.\,p(Y))$ inferences.
-
-Difficulty scales across tiers by simultaneously increasing proof depth
-($n\in[2,15]$) and distractor count ($d\in[0,14]$).
+202 synthetic FOF problems were generated programmatically across four tiers,
+\emph{easy} (32), \emph{medium} (60), \emph{hard} (60), \emph{expert}
+(50), with proof depth $n\in[2,15]$ and distractor count $d\in[0,14]$
+scaling jointly with tier. Four problem families are used.
+\textbf{Implication chains}: a conjecture reachable from a ground fact via
+$n$ universally quantified steps, with $d$ structurally identical
+distractor axioms. \textbf{Syllogisms}: a fixed class hierarchy with a
+ground instance for one individual. \textbf{Transitivity chains}: a single
+binary transitivity axiom plus ground edge facts, requiring repeated reuse
+of the same axiom across different instantiations.
+\textbf{Quantifier alternation}: single-formula conjectures testing
+classical $\forall$/$\exists$ theorems and non-theorems. Unprovable
+variants negate the conjecture (e.g., remove a chain link, change the
+syllogism individual, or ask for an unreachable node).

@@ -2,18 +2,21 @@
 
 \subsection{System Architecture}\label{sec:sysarch}
 
-Figure~\ref{fig:sysarch} shows the end-to-end pipeline of the theorem prover.
-A problem in the TPTP syntax (.p file) is parsed into an initial
-sequent $\Gamma \vdash \Delta$,
-with premises on the left and the conjecture on the right.
-The sequent is dispatched to one of three engines; each engine injects a
-\emph{scheduler policy} into the shared \texttt{backwards\_search} kernel and
-optionally wraps it in an iterative-deepening envelope.
-The kernel returns one of four outcomes: \textit{Provable}, \textit{NotProvable}
-(the goal is counter-satisfiable), \textit{Unknown} (a resource bound was
-reached without a decision), or \textit{Timeout}.
-All three engines share every component except the injected scheduler and
-whether an iterative-deepening loop is present.
+Figure~\ref{fig:sysarch} shows the end-to-end pipeline: a TPTP-style problem is
+parsed into a sequent $\Gamma \vdash \Delta$, dispatched to one of three
+engines, each of which injects a scheduler policy into the shared
+\texttt{backwards\_search} kernel and optionally wraps it in an
+iterative-deepening envelope. All three engines share every component
+except the injected scheduler. The kernel returns one of two
+\emph{decisions}: \textit{Provable}, or \textit{NotProvable} when every
+branch is closed or unclosable. If resources are exhausted before
+deciding, it returns \textit{Unknown} (depth, step, or witness budget
+reached) or \textit{Timeout} (wall-clock limit reached) instead. A problem
+is \emph{decided} when the prover returns \textit{Provable} or
+\textit{NotProvable}; first-order logic is in general
+undecidable~\cite{church1936entscheidungsproblem}, so a sound procedure
+must return \textit{Unknown} rather than \textit{NotProvable} when a
+resource bound is reached without closing every branch.
 
 \begin{figure}[t]
   \centering
@@ -27,80 +30,45 @@ whether an iterative-deepening loop is present.
 \subsection{Baseline: Naive Backward Search}\label{sec:baseline}
 
 Backward proof search applies LK$'$ inference rules \emph{root-first}: the
-prover starts from the goal sequent $\vdash A$ and recursively decomposes it
-until every open leaf is closed by a \emph{closing rule}: the identity axiom
-($\phi \vdash \phi$), $\top R$, or $\bot L$.  Branching rules ($\wedge R$,
-$\vee L$, ${\rightarrow}L$) spawn multiple sub-goals that must all close for
-the parent to close; non-branching rules produce a single successor.
-
-Quantifier rules divide into two classes with distinct side-conditions.
-The \emph{eigenvariable} rules $\forall R$ and $\exists L$ substitute a
-fresh constant that does not appear elsewhere in the current sequent,
-preserving the eigenvariable condition required for soundness.
-The \emph{reusable} rules $\forall L$ and $\exists R$ differ from classical
-LK: the original quantified formula is \emph{retained} on the sequent after
+prover starts from the goal sequent $\vdash A$ and decomposes it until every
+open leaf is closed by a \emph{closing rule} ($\mathit{id}$, $\top R$, or
+$\bot L$). Branching rules ($\wedge R$, $\vee L$, ${\rightarrow}L$) spawn
+multiple sub-goals that must all close; non-branching rules produce a single
+successor. Quantifier rules divide into \emph{eigenvariable} rules
+($\forall R$, $\exists L$), which substitute a fresh constant not appearing
+elsewhere in the sequent, and \emph{reusable} rules ($\forall L$,
+$\exists R$), in which the original quantified formula is retained after
 instantiation, permitting repeated application with different witness terms.
 
-Algorithm~\ref{alg:naive} reproduces the na\"ive backward proof-search
-procedure of Hou~\cite[p.~67]{hou2021fundamentals}, restated in our notation.
-Rules are applied in five sequential priority groups: (1)~closing rules;
-(2)~invertible propositional rules and eigenvariable quantifiers ($\wedge L$,
-$\vee R$, ${\rightarrow}R$, $\neg L$, $\neg R$, $\forall R$, $\exists L$);
-(3)~branching propositional rules ($\wedge R$, $\vee L$, ${\rightarrow}L$);
-(4)~reusable quantifiers ($\forall L$, $\exists R$) with a visible term not
-yet used for that quantified occurrence; and (5)~reusable quantifiers with a
-freshly generated witness.  Groups are mutually exclusive: a higher-priority
-group is exhausted before any rule from a lower-priority group is tried.
-
-\input{pseudocode/naive_alg}
-
-The naive engine makes a single call to \texttt{backwards\_search} with no
-outer loop (Figure~\ref{fig:naive-engine}).  The search is bounded: exceeding
-a depth, step, or time limit returns \textit{Unknown}; exhausting the
-per-occurrence fresh-witness budget (group~5) also returns \textit{Unknown},
-preserving soundness.  A sequent from which no rule applies returns
-\textit{NotProvable}.
-
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\linewidth]{figures/naive_engine_diagram.pdf}
-  \caption{Naive proof engine: single-pass DFS with the five-group
-  naive scheduler.}
-  \label{fig:naive-engine}
-\end{figure}
+The na\"ive procedure of Hou~\cite[Algorithm~2, p.~67]{hou2021fundamentals}
+applies rules in five mutually-exclusive priority groups: (1)~closing
+rules; (2)~invertible propositional rules together with eigenvariable
+quantifiers; (3)~branching propositional rules; (4)~reusable quantifiers
+with a visible witness not yet used; (5)~reusable quantifiers with a
+freshly generated witness.
+The na\"ive engine makes a single pass through \texttt{backwards\_search}
+with no outer loop (Algorithm~\ref{alg:naive}, Appendix~\ref{app:algorithms}).
+Exhausting the per-occurrence fresh-witness budget for group~5 returns
+\textit{Unknown}, preserving soundness.
 
 \subsection{Failure Modes}\label{sec:failure}
 
 We identify two structural weaknesses of Algorithm~\ref{alg:naive}.
 
 \textbf{(F1) Eager eigenconstants.}
-Group~2 lumps the eigenvariable quantifier rules ($\forall R$, $\exists L$)
-with non-branching propositional rules, so the prover commits to a fresh
-eigenconstant even when a branching propositional decomposition would have
-closed the branch by identity. Each eigenconstant enlarges the symbol set,
-which enlarges the candidate set for subsequent $\forall L$/$\exists R$
-instantiations.
+Group~2 lumps $\forall R$/$\exists L$ with invertible propositional rules, so
+the prover introduces a fresh eigenconstant before branching can close the
+branch propositionally, unnecessarily enlarging the witness pool.
 
 \textbf{(F2) Unbounded reusable instantiation.}
-Because $\forall L$ and $\exists R$ retain the original quantified formula
-on the sequent, groups~4 and 5 of Algorithm~\ref{alg:naive} permit an
-arbitrary number of distinct witness terms to be tried before any sibling
-branch is revisited. A na\"ive depth-first loop therefore commits to deep
-instantiation chains before backtracking to easier alternatives.
+Groups~4--5 permit an arbitrary number of witness terms before backtracking,
+so a na\"ive DFS commits to deep instantiation chains before revisiting
+shallower alternatives.
 
-Backward proof search has exponential worst-case complexity in proof depth.
-The search is an AND-OR tree: propositional splitting rules ($\wedge R$,
-$\vee L$, ${\rightarrow}L$) create AND-branches, all of which must close,
-while non-deterministic witness selection for $\forall L$ and $\exists R$
-creates OR-branches that are explored by backtracking.  Under (F2), the
-visible witness pool grows with each fresh constant introduced; a larger
-pool means more OR-branch alternatives at every subsequent node, increasing
-the exponential base at each level of the search.  First-order logic is in
-general undecidable~\cite{church1936entscheidungsproblem}, so a sound proof
-procedure must be a semi-decision procedure: when a resource bound is reached
-without a proof, the prover cannot determine whether no proof exists or one
-exists but requires more resources, and so returns \textit{Unknown} rather
-than \textit{NotProvable}.
+Backward proof search has exponential worst-case complexity: the search is
+an AND-OR tree in which propositional splitting creates AND-branches and
+witness selection creates OR-branches, with the OR-branching factor growing
+under~(F2) as each fresh witness enlarges the visible term pool.
 
 \subsection{Proposed Algorithm}\label{sec:proposed}
 
@@ -109,70 +77,56 @@ search kernel unchanged.
 
 \subsubsection{Building Block A: Iterative Deepening}
 
-Our first refinement wraps the depth-first search in an
-iterative-deepening envelope~\cite{korf1985iterative}.  The outer loop
-(lines 1--6 of Algorithm~\ref{alg:priority-id}) retries
-\texttt{backwards\_search} from $S_0$ at increasing depth limits
-$d = 1, 2, \ldots, D$, returning as soon as some depth produces a
-\textsc{Provable} result.  Because proof depth is proportional to the
-number of rule applications on the longest open branch, this guarantees
-that every proof of depth $k$ is discovered before any branch of depth
-$k{+}1$ is explored; the search never commits to a deep
-quantifier-instantiation chain before exhausting all shallower
-alternatives, directly mitigating (F2).
+Our first refinement wraps the DFS in an iterative-deepening
+envelope~\cite{korf1985iterative}. The outer loop
+(Algorithm~\ref{alg:priority-id}, Appendix~\ref{app:algorithms}) retries
+\texttt{backwards\_search} at increasing depth limits $d = 1, 2, \ldots, D$,
+returning as soon as some depth yields a decision: every branch is closed
+(\textsc{Provable}), or every branch is closed or unclosable within the
+depth bound (\textsc{NotProvable}). Every proof of depth $k$ is therefore
+found before any branch of depth $k{+}1$ is explored, directly
+mitigating~(F2).
 
 \subsubsection{Building Block B: LK$'$ Six-Class Priority Schedule}
 
 Our second refinement replaces the five-group scheduler of
 Algorithm~\ref{alg:naive} with a six-class schedule
-(\textsc{PrioritySchedule} in Algorithm~\ref{alg:priority-id}).
+(\textsc{PrioritySchedule}, Algorithm~\ref{alg:priority-id},
+Appendix~\ref{app:algorithms}).
 The classes are applied in order, returning the first non-empty set of
 applicable rule instances:
 
 \begin{enumerate}
   \item \textbf{Closing rules} ($\mathit{id}$, $\top R$, $\bot L$):
-    terminate the current branch immediately; no new sub-goals are created.
+    terminate the branch; no new sub-goals.
   \item \textbf{Non-branching propositional} ($\wedge L$, $\vee R$,
-    ${\rightarrow}R$, $\neg L$, $\neg R$): invertible rules that decompose
-    a connective deterministically without splitting; zero search cost.
+    ${\rightarrow}R$, $\neg L$, $\neg R$): invertible, decompose without
+    splitting.
   \item \textbf{Branching propositional} ($\wedge R$, $\vee L$,
-    ${\rightarrow}L$): split the goal into multiple sub-goals without
-    enlarging the term universe.
+    ${\rightarrow}L$): split into sub-goals without enlarging the term
+    universe.
   \item \textbf{Eigenvariable quantifiers} ($\forall R$, $\exists L$):
-    introduce a fresh eigenconstant.  Deferring these until after
-    branching rules means propositional decomposition can close branches
-    before any new symbol is added, addressing (F1).
+    introduce a fresh eigenconstant, deferred until after branching to
+    address~(F1).
   \item \textbf{Reusable quantifiers, visible witnesses} ($\forall L$,
-    $\exists R$ instantiated with a term already on the branch):
-    exhausts existing terms before generating new ones; this class is
-    finite and always terminates.
+    $\exists R$ with a term already on the branch): finite class
+    exhausted before generating new symbols.
   \item \textbf{Reusable quantifiers, fresh fallback} ($\forall L$,
-      $\exists R$ with a freshly generated witness, subject to a
-    per-occurrence budget): last resort; when the budget is exhausted
-    the kernel returns \textit{Unknown} rather than \textit{NotProvable},
-    preserving soundness.
+      $\exists R$ with a fresh witness, subject to a per-occurrence
+    budget): budget exhaustion returns \textit{Unknown}, preserving
+    soundness.
 \end{enumerate}
 
 Splitting the original groups~4--5 of Algorithm~\ref{alg:naive} into
 classes~5--6 means the prover always exhausts visible witnesses before
 introducing a new symbol, addressing (F2).
 
-\input{pseudocode/priority_id_algorithm}
+\subsubsection{Combined Prover.}
 
-\subsection{Combined Prover}\label{sec:combined}
-
-The proposed prover \texttt{priority-id} combines both building blocks:
-the six-class priority schedule is injected into \texttt{backwards\_search},
-which is then wrapped in the iterative-deepening outer loop.  Two control
-engines are included for comparison: \texttt{id}, which pairs iterative
-deepening with the naive scheduler to isolate the effect of depth-bounding,
-and \texttt{naive}, the unmodified baseline.
-
-Figure~\ref{fig:priority-id-engine} shows the composition of the two
-building blocks: the iterative-deepening envelope drives the outer search
-strategy, while the six-class LK$'$ priority scheduler governs which rules
-are attempted at every node inside the shared \texttt{backwards\_search}
-kernel.
+The proposed prover \texttt{priority-id} combines both blocks
+(Figure~\ref{fig:priority-id-engine}); two control engines isolate their
+contributions: \texttt{id} (iterative deepening with the na\"ive scheduler)
+and \texttt{naive} (the unmodified baseline).
 
 \begin{figure}[t]
   \centering
@@ -184,42 +138,11 @@ kernel.
 
 \subsection{Expected Performance}\label{sec:hypothesis}
 
-The two refinements attack the exponential search space from complementary
-directions: iterative deepening prunes by \emph{depth}, and the six-class
-priority schedule prunes by \emph{width}.
-
-Iterative deepening imposes an explicit depth cutoff at each iteration,
-discarding any branch that would require more than $d$ rule applications.
-This prevents the prover from descending into deep quantifier-instantiation
-chains before exhausting shallower alternatives, and guarantees that any
-decision of depth $k$ (whether \textit{Provable} or \textit{NotProvable})
-is found on iteration $k$.  The \texttt{id} engine should therefore
-account for the majority of additional solves over \texttt{naive}, as it
-directly addresses the inability of depth-first search to reach short
-proofs when deeper branches are explored first.
-
-The six-class schedule reduces the effective branching factor at each
-node, limiting how wide the search tree can grow:
-
-\begin{itemize}
-  \item \textbf{Closing rules first (class~1):} a branch is terminated as
-    soon as possible, pruning the entire subtree beneath it.
-  \item \textbf{Invertible rules before branching (class~2 before class~3):}
-    non-branching reductions simplify the sequent before any AND-split
-    occurs, potentially enabling early closure and reducing the size of each
-    AND-branch sub-problem.
-  \item \textbf{Branching before eigenvariables (class~3 before class~4):}
-    propositional structure is resolved before any new symbol is introduced.
-    If a branch closes propositionally, the fresh eigenconstant is never
-    generated at all, keeping the visible term pool smaller for all
-    subsequent nodes.
-  \item \textbf{Visible witnesses before fresh (class~5 before class~6):}
-    the OR-branching factor at reusable quantifier choice points is bounded
-    by the current term pool rather than allowed to grow unboundedly; a
-    fresh symbol is only introduced as a last resort.
-\end{itemize}
-
-Together, both refinements should yield strictly more solves than either
-building block alone: iterative deepening recovers proofs that the baseline
-misses entirely due to depth, while the priority schedule reduces wasted
-work within each iteration by keeping the search tree narrower.
+\texttt{id} should account for the majority of additional decisions: by
+guaranteeing that every proof of depth $k$ is discovered on iteration
+$k$, iterative deepening stops the na\"ive DFS from committing to deep
+quantifier-instantiation chains before shallower alternatives are
+exhausted, directly mitigating~(F2). The six-class priority schedule
+then yields a smaller, consistent gain by firing closing and invertible
+rules before any AND-split, and by exhausting visible witnesses before
+introducing a fresh symbol, addressing~(F1).

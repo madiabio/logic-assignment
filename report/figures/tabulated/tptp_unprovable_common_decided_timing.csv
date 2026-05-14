@@ -1,0 +1,13 @@
+problem_id,engine,elapsed_ms
+LCL663+1.001,naive,7
+LCL681+1.001,naive,0
+SYN916+1,naive,6
+LCL679+1.001,naive,0
+LCL663+1.001,id,2
+LCL681+1.001,id,4
+SYN916+1,id,3
+LCL679+1.001,id,1
+LCL663+1.001,priority-id,19
+LCL681+1.001,priority-id,2
+SYN916+1,priority-id,1
+LCL679+1.001,priority-id,0
