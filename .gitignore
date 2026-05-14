@@ -1,5 +1,7 @@
 tptp_problem*/
 tptp_problem*
+FOLIO/generated/
+generated-tests/
 
 target/
 TPTP-v9.2.1/
@@ -44,4 +46,3 @@ docs/
 textbook.pdf
 
 
-FOLIO/generated/
