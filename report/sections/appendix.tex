@@ -11,6 +11,7 @@ the full priority-ID pseudocode.
 
 \input{pseudocode/priority_id_algorithm}
 
+\FloatBarrier
 \section{Per-dataset outcome tables}\label{app:tables}
 
 Tables~\ref{tab:tptp-provable}--\ref{tab:ai-gen} give the full outcome
@@ -80,11 +81,12 @@ decided counts for the synthetic dataset.
   \end{tabular}
 \end{table}
 
+\FloatBarrier
 \section{Auxiliary figures}\label{app:figures}
 
 Figures~\ref{fig:tptp-overview}--\ref{fig:tptp-unprovable} give per-dataset
 breakdowns of the combined overview (Fig.~\ref{fig:all-overview});
-Figure~\ref{fig:synthetic-depth} gives the solve-rate vs.\ chain-depth
+Figure~\ref{fig:synthetic-depth} gives the decision-rate vs.\ chain-depth
 plot for implication-chain problems;
 Figure~\ref{fig:synthetic-tier} gives the tier breakdown for the
 synthetic dataset; Figure~\ref{fig:naive-engine} shows the baseline
@@ -95,7 +97,7 @@ engine diagram.
   \includegraphics[width=\linewidth]{figures/tptp_combined_overview.pdf}
   \caption{TPTP combined dataset (888 problems): outcome counts by engine
     (left), decided vs.\ timeout vs.\ unknown breakdown (centre), and
-    time to conclusion on commonly decided problems, log scale (right).}
+  time to conclusion on commonly decided problems, log scale (right).}
   \label{fig:tptp-overview}
 \end{figure}
 
@@ -104,7 +106,7 @@ engine diagram.
   \includegraphics[width=\linewidth]{figures/folio_overview.pdf}
   \caption{FOLIO validation set (280 problems): outcome counts by engine
     (left), decided vs.\ timeout vs.\ unknown breakdown (centre), and
-    time to conclusion on commonly decided problems, log scale (right).}
+  time to conclusion on commonly decided problems, log scale (right).}
   \label{fig:folio-overview}
 \end{figure}
 
@@ -113,7 +115,7 @@ engine diagram.
   \includegraphics[width=\linewidth]{figures/generated_overview.pdf}
   \caption{Synthetic dataset (202 problems): outcome counts by engine
     (left), decided vs.\ timeout vs.\ unknown breakdown (centre), and
-    time to conclusion on commonly decided problems, log scale (right).}
+  time to conclusion on commonly decided problems, log scale (right).}
   \label{fig:ai-overview}
 \end{figure}
 
@@ -138,7 +140,7 @@ engine diagram.
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.85\linewidth]{figures/generated_depth_solve_rate.pdf}
-  \caption{Solve rate vs.\ chain depth for implication-chain problems
+  \caption{Decision rate vs.\ chain depth for implication-chain problems
   (fraction decided per depth, by engine).}
   \label{fig:synthetic-depth}
 \end{figure}
