@@ -1,6 +1,6 @@
 # Automated First-Order Logic Prover
 
-A Rust implementation of Hou's LK$'$ backward sequent search for first-order
+A Rust implementation of Hou's LK′ backward sequent search for first-order
 logic, with two extensions that address its principal failure modes: a
 6-class **priority schedule** that orders rule applications by productivity,
 and an **iterative-deepening** envelope around the depth-first kernel. All
@@ -15,7 +15,7 @@ reproducibility recipe; it does not duplicate the report's prose.
 
 | Report section (`report/sections/`)   | What it covers                            |
 | ------------------------------------- | ----------------------------------------- |
-| `introduction.tex`                    | LK$'$ background, the two extensions.     |
+| `introduction.tex`                    | LK′ background, the two extensions.     |
 | `background.tex`                      | Sequent calculus, related provers.        |
 | `proposed-approach.tex`               | Priority schedule and iterative deepening. |
 | `implementation.tex`                  | Rust crates, run configuration, hardware. |
@@ -78,7 +78,7 @@ the 6-class priority schedule).
 Each subset file's **first line** records the exact `tptp2T` / `tptp2t`
 selection command that produced it, run inside a TPTP-v9 distribution:
 
-- `easy_problems.txt` — FOF/THM, rating 0, $\le 50$ formulae, $\le 150$ atoms, no equality or arithmetic.
+- `easy_problems.txt` — FOF/THM, rating 0, ≤ 50 formulae, ≤ 150 atoms, no equality or arithmetic.
 - `medium_problems.txt` — FOF/THM, unbounded rating, same complexity bounds.
 - `medium_problems_countersatisfiable.txt` — FOF/CSA, unbounded rating, same bounds.
 

@@ -1,6 +1,6 @@
 # `theorem_prover/`
 
-A first-order logic prover implementing Hou's LK$'$ backward sequent
+A first-order logic prover implementing Hou's LK′ backward sequent
 search (`naive`), an iterative-deepening envelope around it (`id`), and a
 6-class priority-scheduled variant of iterative deepening (`priority-id`).
 All three engines share the parser, sequent representation, rule layer,
@@ -10,7 +10,7 @@ The calculus, engine designs, and evaluation are documented in the
 project report:
 
 - `report/sections/proposed-approach.tex` — system architecture, the
-  LK$'$ baseline, the priority schedule (six classes), and the
+  LK′ baseline, the priority schedule (six classes), and the
   iterative-deepening envelope.
 - `report/sections/implementation.tex` — Rust crates, run configuration,
   and hardware.
@@ -62,14 +62,14 @@ errors out if only one is supplied.
 | Command | Purpose                                                                  |
 | ------- | ------------------------------------------------------------------------ |
 | `prove` | Run proof search over a `.p` file, a directory of `.p` files, or a subset description against a TPTP root. |
-| `rules` | Inspect which LK$'$ rules apply to each formula in the input, without running search. Useful for debugging the parser or the rule matcher. |
+| `rules` | Inspect which LK′ rules apply to each formula in the input, without running search. Useful for debugging the parser or the rule matcher. |
 
 ## Engines
 
 Selected via `--engine`:
 
 - `naive` — Hou's depth-first backward search. Baseline.
-- `id` — iterative deepening over the same DFS: depth limits $1, 2, 3, \dots$
+- `id` — iterative deepening over the same DFS: depth limits 1, 2, 3, …
   up to `--max-depth`, restarting between iterations.
 - `priority-id` — iterative deepening with the 6-class priority schedule
   (closing rules first, then non-branching propositional, then branching,
@@ -145,7 +145,7 @@ src/
 │   ├── apply.rs         glue between matched rules and the kernel
 │   ├── quantifier/      fresh constants, instantiation, witness budget
 │   ├── search/          backwards_search kernel
-│   │   ├── scheduler.rs the 6-class LK$'$ priority order
+│   │   ├── scheduler.rs the 6-class LK′ priority order
 │   │   ├── branch_state.rs   per-branch term store and quantifier reuse
 │   │   └── engine/      `naive.rs`, `iterative_deepening.rs`
 │   └── defaults.rs      proof-option defaults

@@ -24,9 +24,9 @@ conjecture), not negated tautologies, so a sound prover can decide them.
 
 | Family | Provable form | Unprovable form |
 | --- | --- | --- |
-| **Implication chain** (`chain_provable`, `chain_unprovable`) | `p0(a)`, $n$ steps `∀X. p_i(X) ⇒ p_{i+1}(X)`, plus $d$ distractor chains `q_i ⇒ q_{i+1}`. Goal: `p_n(a)`. | Same shape with the step at position `gap` removed; the chain is severed and the goal is unreachable. |
+| **Implication chain** (`chain_provable`, `chain_unprovable`) | `p0(a)`, `n` steps `∀X. p_i(X) ⇒ p_{i+1}(X)`, plus `d` distractor chains `q_i ⇒ q_{i+1}`. Goal: `p_n(a)`. | Same shape with the step at position `gap` removed; the chain is severed and the goal is unreachable. |
 | **Syllogism** (`syllogism_provable`, `syllogism_unprovable`) | A `depth+1`-deep class hierarchy `c_i(X) ⇒ c_{i+1}(X)` plus `c_0(socrates)`. Goal: `c_{depth+1}(socrates)`. | Same hierarchy and ground fact, but the goal asks about `plato` instead. |
-| **Transitivity chain** (`trans_provable`, `trans_unprovable`) | One `rel` transitivity axiom plus $n$ ground edges `rel(a_i, a_{i+1})`, with optional unrelated `other(b_i, b_{i+1})` distractors. Goal: `rel(a_0, a_n)`. | Same axiom and edges, but the goal asks for `rel(a_0, a_{n+2})`, beyond the chain's reach. |
+| **Transitivity chain** (`trans_provable`, `trans_unprovable`) | One `rel` transitivity axiom plus `n` ground edges `rel(a_i, a_{i+1})`, with optional unrelated `other(b_i, b_{i+1})` distractors. Goal: `rel(a_0, a_n)`. | Same axiom and edges, but the goal asks for `rel(a_0, a_{n+2})`, beyond the chain's reach. |
 | **Quantifier alternation** (`q_*` helpers) | Single-formula classical theorems: drinker, converse Barcan, Pelletier 18, Russell diagonal, etc. | Single-formula non-theorems: Barcan, `∃ ⇒ ∀`, contradiction-everywhere, and similar. |
 
 ### Tier construction
