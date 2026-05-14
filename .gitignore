@@ -1,5 +1,7 @@
 tptp_problem*/
 tptp_problem*
+FOLIO/generated/
+generated-tests/
 
 target/
 TPTP-v9.2.1/
@@ -39,7 +41,8 @@ Springer_Lecture_Notes_in_Computer_Science.zip
 *.swp
 *.tmp
 *~
-MPTPTP2078/
 docs/
 
 textbook.pdf
+
+

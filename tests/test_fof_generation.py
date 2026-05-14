@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 
 TEST_DIR = Path(__file__).parent.parent
-AI_GEN_DIR = TEST_DIR / "AI_generated"
+GENERATED_TESTS_DIR = TEST_DIR / "generated-tests"
 
 def count_atoms_in_formula(formula: str) -> int:
     """Count unique predicate atoms in a formula."""
@@ -45,14 +45,14 @@ def extract_problems_from_file(filepath: str):
 def test_files_exist():
     """Verify all output files were generated."""
     for tier in ["easy", "medium", "hard", "expert"]:
-        filepath = AI_GEN_DIR / f"{tier}.p"
+        filepath = GENERATED_TESTS_DIR / f"{tier}.p"
         assert filepath.exists(), f"Missing {tier}.p"
     print("[PASS] All files exist")
 
 def test_problems_parse():
     """Verify all problems have valid TPTP syntax."""
     for tier in ["easy", "medium", "hard", "expert"]:
-        filepath = AI_GEN_DIR / f"{tier}.p"
+        filepath = GENERATED_TESTS_DIR / f"{tier}.p"
         problems = extract_problems_from_file(str(filepath))
         assert len(problems) > 0, f"No problems in {tier}.p"
 
@@ -67,7 +67,7 @@ def test_problems_parse():
 def test_atom_count_ranges():
     """Verify atom counts match spec ranges and that complexity increases per tier."""
     for tier in ["easy", "medium", "hard", "expert"]:
-        filepath = AI_GEN_DIR / f"{tier}.p"
+        filepath = GENERATED_TESTS_DIR / f"{tier}.p"
         problems = extract_problems_from_file(str(filepath))
 
         atoms_list = [atoms for _, _, atoms in problems]
@@ -90,7 +90,7 @@ def test_atom_count_ranges():
 def test_provable_unprovable_split():
     """Verify ~50/50 provable/unprovable split."""
     for tier in ["easy", "medium", "hard", "expert"]:
-        filepath = AI_GEN_DIR / f"{tier}.p"
+        filepath = GENERATED_TESTS_DIR / f"{tier}.p"
         problems = extract_problems_from_file(str(filepath))
 
         provable_count = sum(1 for name, _, _ in problems if "prov_" in name)
@@ -111,7 +111,7 @@ def test_total_problem_count():
     """Verify we have 100+ problems total."""
     total = 0
     for tier in ["easy", "medium", "hard", "expert"]:
-        filepath = AI_GEN_DIR / f"{tier}.p"
+        filepath = GENERATED_TESTS_DIR / f"{tier}.p"
         problems = extract_problems_from_file(str(filepath))
         total += len(problems)
 

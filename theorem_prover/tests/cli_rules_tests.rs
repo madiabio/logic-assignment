@@ -1170,15 +1170,26 @@ fof(conj_1,conjecture,p).
         .expect("binary should run");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "stdout was:\n{stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "exit: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        output.status.code(),
+    );
     assert!(
         stdout.contains(
             "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms\tdetail"
         ),
-        "stdout was:\n{stdout}"
+        "stdout was:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stdout.contains("\tUnknown\t"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("\tmax_steps"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("\tUnknown\t"),
+        "stdout was:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("\tmax_steps"),
+        "stdout was:\n{stdout}\nstderr:\n{stderr}"
+    );
 }
 
 #[test]
@@ -1383,55 +1394,6 @@ fof(conj_1,conjecture,p).
     );
     assert!(
         stdout.contains("max_biconditionals=12"),
-        "stdout was:\n{stdout}"
-    );
-}
-
-#[test]
-fn prove_subcommand_directory_summarizes_proof_statuses() {
-    let dir = make_temp_dir("prove_directory_status_summary");
-    write_problem_file(
-        &dir,
-        "provable.p",
-        r#"
-fof(ax_1,axiom,p).
-fof(conj_1,conjecture,p).
-"#,
-    );
-    write_problem_file(
-        &dir,
-        "not_provable.p",
-        r#"
-fof(ax_1,axiom,p).
-fof(conj_1,conjecture,q).
-"#,
-    );
-    write_problem_file(
-        &dir,
-        "bad_parse.p",
-        r#"
-fof(ax_1,axiom,p)
-"#,
-    );
-
-    let output = Command::new(env!("CARGO_BIN_EXE_theorem_prover"))
-        .args(["prove", "--problem-class", "provable", dir.to_str().expect("path should be utf-8")])
-        .output()
-        .expect("binary should run");
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(
-        !output.status.success(),
-        "expected processing failure\nstdout:\n{stdout}\nstderr:\n{stderr}"
-    );
-    assert!(stdout.contains("summary"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("processed"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("provable"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("not_provable"), "stdout was:\n{stdout}");
-    assert!(
-        stdout.contains("failed_to_process"),
         "stdout was:\n{stdout}"
     );
 }

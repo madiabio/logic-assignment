@@ -21,7 +21,7 @@ Why these problems discriminate between engines:
 Usage:
     python scripts/generate_fof_benchmarks.py
 
-Output: one .p file per problem in AI_generated/
+Output: one .p file per problem in generated-tests/
     easy_1.p  .. easy_N.p
     medium_1.p .. medium_N.p
     hard_1.p  .. hard_N.p
@@ -268,7 +268,7 @@ def collect_all() -> dict:
     return problems
 
 
-def main(output_dir: str = "AI_generated") -> None:
+def main(output_dir: str = "generated-tests") -> None:
     os.makedirs(output_dir, exist_ok=True)
     for f in os.listdir(output_dir):
         if f.endswith('.p'):

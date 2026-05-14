@@ -28,39 +28,28 @@ Table~\ref{tab:summary} reports decided counts across all datasets.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{figures/tptp_combined_overview.pdf}
-  \caption{TPTP combined dataset (888 problems): outcome counts by engine
-    (left), decided vs.\ timeout vs.\ unknown breakdown (centre), and
-    time to conclusion on commonly decided problems, log scale (right).}
-  \label{fig:tptp-overview}
+  \includegraphics[width=\linewidth]{figures/all_combined_overview.pdf}
+  \caption{Outcomes by engine across all three datasets (TPTP 888,
+    FOLIO 280, synthetic 202). For each dataset: outcome counts by
+    engine (left), decided vs.\ timeout vs.\ unknown breakdown (centre),
+    and time to conclusion on commonly decided problems, log scale
+    (right). Per-dataset views in Figs.~\ref{fig:tptp-overview},
+    \ref{fig:folio-overview}, and~\ref{fig:ai-overview},
+    Appendix~\ref{app:figures}.}
+  \label{fig:all-overview}
 \end{figure}
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/folio_overview.pdf}
-  \caption{FOLIO validation set (280 problems): same layout as
-    Fig.~\ref{fig:tptp-overview}.}
-  \label{fig:folio-overview}
-\end{figure}
+On TPTP (Fig.~\ref{fig:tptp-overview}, Appendix~\ref{app:figures}),
+\texttt{naive} decides 156, \texttt{id} 203 ($+30\,\%$), and
+\texttt{priority-id} 213 ($+37\,\%$); all gains come from the provable
+subset, as the four counter-satisfiable decisions are shared.
+\texttt{id} and \texttt{priority-id} also solve shared problems faster
+on average, consistent with fewer wasted steps in unclosable branches.
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{figures/ai_generated_overview.pdf}
-  \caption{Synthetic dataset (202 problems): same layout as
-    Fig.~\ref{fig:tptp-overview}.}
-  \label{fig:ai-overview}
-\end{figure}
-
-On TPTP (Figure~\ref{fig:tptp-overview}), \texttt{naive} decides 156,
-\texttt{id} 203 ($+30\,\%$), and \texttt{priority-id} 213 ($+37\,\%$);
-all gains come from the provable subset, as the four counter-satisfiable
-decisions are shared. \texttt{id} and \texttt{priority-id} also solve
-shared problems faster on average, consistent with fewer wasted steps in
-unclosable branches.
-
-The FOLIO results (Figure~\ref{fig:folio-overview}) reveal a different
-pattern: \texttt{naive} and \texttt{id} both decide 57 problems but with
-shifted composition (\texttt{naive} 34/23 \textit{Provable}/\textit{NotProvable};
+The FOLIO results (Fig.~\ref{fig:folio-overview},
+Appendix~\ref{app:figures}) reveal a different pattern: \texttt{naive}
+and \texttt{id} both decide 57 problems but with shifted composition
+(\texttt{naive} 34/23 \textit{Provable}/\textit{NotProvable};
 \texttt{id} 40/17). Iterative deepening converts 11 naive-timeouts to
 \textit{Provable} but offsets this by causing 5 \textit{Provable}
 decisions to time out and 6 \textit{NotProvable} decisions to become
@@ -69,9 +58,9 @@ trade-off, deciding 66 problems (38/28) by converting 11 of \texttt{id}'s
 \textit{Unknown}/\textit{Timeout} outcomes to \textit{NotProvable} and
 reducing \textit{Unknown} from 25 to 10.
 
-On the synthetic dataset (Figure~\ref{fig:ai-overview}), \texttt{naive}
-decides 26, \texttt{id} 39 ($+50\,\%$), and \texttt{priority-id} 42
-($+62\,\%$). Gains concentrate in the medium and hard tiers
+On the synthetic dataset (Fig.~\ref{fig:ai-overview},
+Appendix~\ref{app:figures}), \texttt{naive} decides 26, \texttt{id} 39
+($+50\,\%$), and \texttt{priority-id} 42 ($+62\,\%$). Gains concentrate in the medium and hard tiers
 (Table~\ref{tab:synthetic-tier}, Appendix~\ref{app:tables}); no engine
 decides any expert-tier problem, and all 43 transitivity-chain problems
 time out under every engine. Figure~\ref{fig:synthetic-depth}
