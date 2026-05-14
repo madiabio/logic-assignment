@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 
 TEST_DIR = Path(__file__).parent.parent
-AI_GEN_DIR = TEST_DIR / "AI_generated"
+GENERATED_TESTS_DIR = TEST_DIR / "generated-tests"
 
 def count_atoms_in_formula(formula: str) -> int:
     """Count unique predicate atoms in a formula."""
