@@ -12,10 +12,9 @@ Produces the 202-problem synthetic benchmark cited in
 python scripts/generate_fof_benchmarks.py
 ```
 
-Output: one `.p` file per problem in the output directory (default
-`AI_generated/`; the committed copy lives in `generated-tests/`, which was
-renamed in commit `446b5cb`). The script clears any existing `.p` files in
-the output directory before writing, so it is idempotent.
+Output: one `.p` file per problem in `generated-tests/` (the default; pass
+a different path to `main()` to override). The script clears any existing
+`.p` files in the output directory before writing, so it is idempotent.
 
 ### Problem families
 
