@@ -1,0 +1,24 @@
+Automated theorem proving for first-order logic can be studied
+through sequent calculi, where a proof is built by repeatedly
+decomposing a goal sequent into simpler subgoals. This report
+investigates backward proof search for the pedagogical LK$'$ calculus
+of Hou~\cite{hou2021fundamentals}, starting with the na\"ive
+backtracking procedure of the same textbook (Algorithm~2, p.~67).
+The procedure is simple to implement and closely follows the calculus,
+but its search space is exponential: reusable quantifier rules
+instantiate witnesses without consuming the quantified formula, and
+branching connectives compound the branching factor. A Rust
+implementation evaluates two refinements over this baseline: iterative
+deepening~\cite{korf1985iterative}, which repeatedly runs depth-bounded
+search to find shallow proofs before deeper distractions, and a
+six-class rule priority schedule that attempts closing and low-branching
+rules before more expansive quantifier steps. Across three datasets
+totalling 1{,}370 problems within a one-second budget, the baseline
+decides 239 problems and the combined priority-ID prover decides 321, giving
+a 34\,\% improvement. Iterative deepening contributes the majority of
+the gain by avoiding premature commitment to deep
+quantifier-instantiation chains; priority scheduling adds consistent
+but smaller benefits by delaying costly rule applications.
+
+\keywords{Sequent calculus \and LK$'$ \and Backward proof search \and
+Iterative deepening \and First-order logic \and TPTP.}

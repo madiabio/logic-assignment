@@ -1,0 +1,29 @@
+% Requires \usepackage{algorithm} and \usepackage{algpseudocode}.
+% This fragment is intended to be included from report/samplepaper.tex.
+\begin{algorithm}
+  \caption{Na\"ive backward proof search for LK$'$ (Algorithm~2 of
+  \cite[p.~67]{hou2021fundamentals})}\label{alg:naive}
+  \begin{algorithmic}[1]
+    \Require First-order formula $A$
+    \Ensure Derivation tree in LK$'$, or report no proof found
+    \State build the bottom sequent $\vdash A$
+    \ForAll{top sequents on an open branch}
+    \If{any of $\mathit{id}, \top R, \bot L$ is applicable}
+    \State apply the rule backwards and close the branch
+    \ElsIf{any of $\wedge L, \vee R, {\rightarrow}R, \neg L, \neg R,
+    \forall R, \exists L$ is applicable}
+    \State apply the rule backwards
+    \ElsIf{any of $\wedge R, \vee L, {\rightarrow}L$ is applicable}
+    \State apply the rule backwards and create a new branch
+    \ElsIf{$\forall L$ or $\exists R$ is applicable, and there is a
+      term $t$ that has not been used to instantiate the quantified
+    variable $x$ in this formula}
+    \State apply the rule backwards, substituting $x$ with $t$
+    \ElsIf{$\forall L$ or $\exists R$ is applicable}
+    \State apply the rule backwards and create a fresh term
+    \Else
+    \State stop
+    \EndIf
+    \EndFor
+  \end{algorithmic}
+\end{algorithm}

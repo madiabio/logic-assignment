@@ -1,0 +1,59 @@
+% Requires \usepackage{algorithm} and \usepackage{algpseudocode}.
+% This fragment is intended to be included from report/samplepaper.tex.
+
+\begin{algorithm}
+  \caption{Priority-ID backward proof search for LK$'$}\label{alg:priority-id}
+  \begin{algorithmic}[1]
+    \Require Goal sequent $S_0$, maximum depth $D$
+    \Ensure \textsc{Provable}, \textsc{NotProvable}, or \textsc{DepthExceeded}
+
+    \For{$d \gets 1$ \textbf{to} $D$} \Comment{try increasing depth budgets}
+    \State $result \gets \Call{Search}{S_0,\; 0,\; d}$
+    \If{$result \neq \textsc{DepthExceeded}$}
+    \State \Return $result$
+    \EndIf
+    \EndFor
+    \State \Return \textsc{DepthExceeded}
+
+    \Function{Search}{$S,\; depth,\; limit$}
+    \If{$depth > limit$}
+    \State \Return \textsc{DepthExceeded}
+    \EndIf
+    \State $R \gets \Call{PrioritySchedule}{S}$
+    \If{$R = \emptyset$}
+    \State \Return \textsc{NotProvable} \Comment{no rule applies}
+    \EndIf
+    \ForAll{rule $r \in R$}
+    \State $\mathit{premises} \gets$ apply $r$ backwards to $S$
+    \If{$\mathit{premises} = \emptyset$} \Comment{axiom: branch
+    closed immediately}
+    \State \Return \textsc{Provable}
+    \EndIf
+    \If{$\forall P \in \mathit{premises}: \Call{Search}{P,\;
+    depth+1,\; limit} = \textsc{Provable}$}
+    \State \Return \textsc{Provable}
+    \EndIf
+    \EndFor
+    \State \Return \textsc{NotProvable}
+    \EndFunction
+
+    \Function{PrioritySchedule}{$S$}
+    \State Collect all applicable LK$'$ rule instances from $S$.
+    \State Return the \textbf{first non-empty} class from the ordered
+    list below.
+    \Statex
+    \Statex \textbf{1.} Axioms: $\mathit{id}$,\; $\top R$,\; $\bot L$
+    \Statex \textbf{2.} Invertible, non-branching: $\wedge L$,\;
+    $\vee R$,\; $\to R$,\; $\neg L$,\; $\neg R$
+    \Statex \textbf{3.} Invertible, branching: $\wedge R$,\; $\vee L$,\; $\to L$
+    \Statex \textbf{4.} Non-reusable quantifiers: $\forall R$,\; $\exists L$
+    \Statex \textbf{5.} Reusable quantifiers ($\forall L$,\; $\exists
+    R$) with terms already on the branch
+    \Statex \textbf{6.} Reusable quantifiers ($\forall L$,\; $\exists
+    R$) with one new fresh term
+    \Statex
+    \State \Return $\emptyset$ if no class has a match.
+    \EndFunction
+
+  \end{algorithmic}
+\end{algorithm}

@@ -1,0 +1,30 @@
+\subsubsection{TPTP.}
+Two subsets of the TPTP problem library~\cite{Sut17} are used. The first is a
+737-problem provable subset (FOF/THM), restricted to problems with 0--50 input
+formulae, 0--150 atoms, and no equality or arithmetic. The second is a
+204-problem counter-satisfiable subset (FOF/CSA) drawn from the same
+complexity bounds, in which each problem is known to have no proof because
+its negation is satisfiable. The two subsets together test both sides
+of the prover against problems with
+known status across diverse mathematical domains.
+
+\subsubsection{FOLIO.}
+The FOLIO dataset~\cite{han2024folio} provides 280 human-authored
+natural-language reasoning problems formalised as FOF, testing whether the
+prover's behaviour generalises beyond the controlled TPTP filter.
+
+\subsubsection{Synthetic.}
+202 synthetic FOF problems were generated programmatically across four tiers,
+\emph{easy} (32), \emph{medium} (60), \emph{hard} (60), \emph{expert}
+(50), with proof depth $n\in[2,15]$ and distractor count $d\in[0,14]$
+scaling jointly with tier. Four problem families are used.
+\textbf{Implication chains}: a conjecture reachable from a ground fact via
+$n$ universally quantified steps, with $d$ structurally identical
+distractor axioms. \textbf{Syllogisms}: a fixed class hierarchy with a
+ground instance for one individual. \textbf{Transitivity chains}: a single
+binary transitivity axiom plus ground edge facts, requiring repeated reuse
+of the same axiom across different instantiations.
+\textbf{Quantifier alternation}: single-formula conjectures testing
+classical $\forall$/$\exists$ theorems and non-theorems. Unprovable
+variants negate the conjecture (e.g., remove a chain link, change the
+syllogism individual, or ask for an unreachable node).

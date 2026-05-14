@@ -11,13 +11,16 @@ use crate::cli::parse_failure::{
     clear_parse_failure_marker, should_skip_parse_failed_file, write_parse_failure_marker,
 };
 use crate::cli::subset::{ProblemRun, subset_stats_fields};
+use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::time::Instant;
 use theorem_prover::{
     ProblemPipelineError, ProofStatus, RunProblemOptions, UnknownReason,
 };
-use theorem_prover::persistence::{self, ResultRecord};
+use theorem_prover::persistence::ResultRecord;
 
 /// Result of running the prover on one file.
 #[derive(Clone)]
@@ -44,7 +47,6 @@ pub(crate) struct ProveBatchSummary {
     not_implemented: usize,
     error: usize,
     failed_to_process: usize,
-    interrupted_problem: Option<String>,
     failed_files: Vec<PathBuf>,
 }
 
@@ -59,7 +61,6 @@ impl ProveBatchSummary {
             ProveFileResult::Status(ProofStatus::Unknown, _) => self.unknown += 1,
             ProveFileResult::Status(ProofStatus::Cancelled, _) => {
                 self.cancelled += 1;
-                self.interrupted_problem = Some(problem_run.problem_id());
             }
             ProveFileResult::Status(ProofStatus::NotImplemented, _) => {
                 self.not_implemented += 1;
@@ -79,8 +80,8 @@ pub(crate) fn prove_directory(
     options: &ProveCommand,
     cancellation: &CancellationState,
     settings: &str,
-    db_state: Option<(rusqlite::Connection, i64)>,
-) {
+    db_sender: Option<mpsc::Sender<ResultRecord>>,
+) -> Option<i32> {
     let entries = fs::read_dir(dir).expect("Failed to read directory");
     let mut problem_runs = Vec::new();
     for entry in entries {
@@ -98,109 +99,62 @@ pub(crate) fn prove_directory(
     }
 
     print_prove_preamble(options.format, None, settings);
-    prove_paths(&problem_runs, options, cancellation, db_state);
+    prove_paths(&problem_runs, options, cancellation, db_sender)
 }
 
 /// Processes many problems through the prover, emits aggregate results, and
-/// optionally persists each result to a SQLite database.
+/// optionally sends each result to a DB writer thread over a channel.
 ///
-/// When `db_state` is `Some((conn, run_id))`, every successful problem result
-/// is committed to the database immediately after it completes. The final
-/// summary is then sourced from a `query_run_summary` DB query. When
-/// `db_state` is `None`, the existing in-memory `ProveBatchSummary` is used.
+/// When `db_sender` is `Some(sender)`, every successful problem result is sent
+/// to the writer thread. The in-memory `ProveBatchSummary` is always used for
+/// the final summary output.
 pub(crate) fn prove_paths(
     problem_runs: &[ProblemRun],
     options: &ProveCommand,
     cancellation: &CancellationState,
-    db_state: Option<(rusqlite::Connection, i64)>,
-) {
-    let mut summary = ProveBatchSummary::default();
+    db_sender: Option<mpsc::Sender<ResultRecord>>,
+) -> Option<i32> {
     let total = problem_runs.len();
-    for (index, problem_run) in problem_runs.iter().enumerate() {
-        if cancellation.is_requested() {
-            break;
-        }
-
+    let mut skipped_count = 0;
+    let mut runnable_problem_runs = Vec::new();
+    for problem_run in problem_runs {
         if should_skip_parse_failed_file(&problem_run.path, options) {
-            summary.skipped += 1;
-            continue;
-        }
-
-        let started_at = Instant::now();
-        let result = prove_file(problem_run, options, cancellation, index + 1, total);
-        let elapsed_ms = started_at.elapsed().as_millis();
-        summary.record_result(problem_run, &result);
-
-        if let Some((conn, run_id)) = db_state.as_ref() {
-            if let Some(record) = result_record_for_problem(problem_run, &result, elapsed_ms) {
-                if let Err(err) = persistence::insert_result(conn, *run_id, &record) {
-                    eprintln!(
-                        "warning: failed to persist result for {}: {err}",
-                        problem_run.problem_id()
-                    );
-                }
-            }
-        }
-
-        if matches!(result, ProveFileResult::Status(ProofStatus::Cancelled, _)) {
-            break;
+            skipped_count += 1;
+        } else {
+            runnable_problem_runs.push(problem_run);
         }
     }
 
-    // Print summary sourcing counts from DB when persistence is active.
-    if let Some((conn, run_id)) = db_state.as_ref() {
-        match persistence::query_run_summary(conn, *run_id) {
-            Ok(db_summary) => {
-                let get = |key: &str| db_summary.get(key).copied().unwrap_or(0).to_string();
-                match options.format {
-                    OutputFormat::Human => {
-                        print_summary_header("summary");
-                        print_summary_row(&[
-                            ("processed", summary.processed.to_string()),
-                            ("skipped", summary.skipped.to_string()),
-                            ("provable", get("provable")),
-                            ("not_provable", get("not_provable")),
-                            ("timeout", get("timeout")),
-                            ("unknown", get("unknown")),
-                            ("cancelled", get("cancelled")),
-                            ("not_impl", get("not_implemented")),
-                            ("error", get("error")),
-                            ("failed_to_process", summary.failed_to_process.to_string()),
-                        ]);
-                        if let Some(problem_id) = &summary.interrupted_problem {
-                            eprintln!("Cancelled while proving {problem_id}");
-                        } else if cancellation.is_requested() {
-                            eprintln!("Cancelled before starting the next problem");
-                        }
-                    }
-                    OutputFormat::Tsv => {
-                        println!(
-                            "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                            summary.processed,
-                            summary.skipped,
-                            get("provable"),
-                            get("not_provable"),
-                            get("timeout"),
-                            get("unknown"),
-                            get("cancelled"),
-                            get("not_implemented"),
-                            get("error"),
-                            summary.failed_to_process,
-                            summary.interrupted_problem.as_deref().unwrap_or_default()
+    let counter = AtomicUsize::new(0);
+    let results: Vec<(ProblemRun, ProveFileResult, u128)> = runnable_problem_runs
+        .par_iter()
+        .map(|problem_run| {
+            let problem_run = *problem_run;
+            let current = counter.fetch_add(1, Ordering::Relaxed) + 1;
+            let (result, elapsed_ms) =
+                prove_file(problem_run, options, cancellation, current, total);
+            if let Some(sender) = db_sender.as_ref() {
+                if let Some(record) = result_record_for_problem(problem_run, &result, elapsed_ms) {
+                    if let Err(err) = sender.send(record) {
+                        eprintln!(
+                            "warning: failed to queue result for {}: {err}",
+                            problem_run.problem_id()
                         );
                     }
                 }
             }
-            Err(err) => {
-                eprintln!(
-                    "warning: failed to query run summary from DB: {err}"
-                );
-                print_in_memory_summary(options, &summary, cancellation);
-            }
-        }
-    } else {
-        print_in_memory_summary(options, &summary, cancellation);
+            (problem_run.clone(), result, elapsed_ms)
+        })
+        .collect();
+
+    let mut summary = ProveBatchSummary::default();
+    summary.skipped = skipped_count;
+
+    for (problem_run, result, _elapsed_ms) in &results {
+        summary.record_result(problem_run, result);
     }
+
+    print_in_memory_summary(options, &summary, cancellation);
 
     if options.format == OutputFormat::Human && !summary.failed_files.is_empty() {
         eprintln!("Failed files:");
@@ -209,11 +163,7 @@ pub(crate) fn prove_paths(
         }
     }
 
-    if let Some(code) =
-        prove_batch_exit_code(summary.cancelled, summary.failed_to_process, cancellation)
-    {
-        std::process::exit(code);
-    }
+    prove_batch_exit_code(summary.cancelled, summary.failed_to_process, cancellation)
 }
 
 /// Prints the in-memory `ProveBatchSummary` as the summary section.
@@ -237,15 +187,13 @@ fn print_in_memory_summary(
                 ("error", summary.error.to_string()),
                 ("failed_to_process", summary.failed_to_process.to_string()),
             ]);
-            if let Some(problem_id) = &summary.interrupted_problem {
-                eprintln!("Cancelled while proving {problem_id}");
-            } else if cancellation.is_requested() {
-                eprintln!("Cancelled before starting the next problem");
+            if cancellation.is_requested() {
+                eprintln!("Cancelled.");
             }
         }
         OutputFormat::Tsv => {
             println!(
-                "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                "summary\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                 summary.processed,
                 summary.skipped,
                 summary.provable,
@@ -255,8 +203,7 @@ fn print_in_memory_summary(
                 summary.cancelled,
                 summary.not_implemented,
                 summary.error,
-                summary.failed_to_process,
-                summary.interrupted_problem.as_deref().unwrap_or_default()
+                summary.failed_to_process
             );
         }
     }
@@ -295,14 +242,14 @@ pub(crate) fn result_record_for_problem(
 }
 
 /// Runs the prover for one file and returns either a proof status or a
-/// processing failure.
+/// processing failure, along with the internally-measured elapsed time in milliseconds.
 pub(crate) fn prove_file(
     problem_run: &ProblemRun,
     options: &ProveCommand,
     cancellation: &CancellationState,
     current: usize,
     total: usize,
-) -> ProveFileResult {
+) -> (ProveFileResult, u128) {
     let proof_options = prover_options_from_cli(options);
     let biconditional_policy = biconditional_policy_from_cli(options.run.max_biconditionals);
     let started_at = Instant::now();
@@ -344,7 +291,7 @@ pub(crate) fn prove_file(
                     status
                 ),
             }
-            ProveFileResult::Status(status, unknown_reason)
+            (ProveFileResult::Status(status, unknown_reason), elapsed_ms)
         }
         Err(ProblemPipelineError::Parse(err)) => {
             write_parse_failure_marker(&problem_run.path, &err);
@@ -365,7 +312,7 @@ pub(crate) fn prove_file(
                 ),
             }
             eprintln!("{err}");
-            ProveFileResult::ProcessingFailure
+            (ProveFileResult::ProcessingFailure, started_at.elapsed().as_millis())
         }
         Err(ProblemPipelineError::Include(err)) => {
             clear_parse_failure_marker(&problem_run.path);
@@ -386,7 +333,7 @@ pub(crate) fn prove_file(
                 ),
             }
             eprintln!("{err}");
-            ProveFileResult::ProcessingFailure
+            (ProveFileResult::ProcessingFailure, started_at.elapsed().as_millis())
         }
         Err(ProblemPipelineError::SequentBuild(err)) => {
             match options.format {
@@ -406,7 +353,7 @@ pub(crate) fn prove_file(
                 ),
             }
             eprintln!("sequent construction failed: {err:?}");
-            ProveFileResult::ProcessingFailure
+            (ProveFileResult::ProcessingFailure, started_at.elapsed().as_millis())
         }
     }
 }

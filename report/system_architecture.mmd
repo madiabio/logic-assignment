@@ -1,0 +1,54 @@
+---
+title: Theorem Prover System Architecture
+---
+flowchart LR
+    IN["TPTP .p file"] --> P1["TPTP parser"]
+    P1 --> SEQ["Build Γ ⊢ Δ\npremises left, conjecture right"]
+    SEQ --> E0
+
+    subgraph ENG["Engine Selection"]
+        E0["prove_with_cancel"] --> E1{"engine?"}
+        E1 -->|Naive| E2["DFS\n+ naive scheduler"]
+        E1 -->|ID| E4["iterative deepening\n+ naive scheduler"]
+        E1 -->|Priority-ID| E5["iterative deepening\n+ LK-priority scheduler"]
+    end
+
+    E2 & E4 -."naive".-> SN
+    E5 -."LK-priority".-> SP
+
+    subgraph SCHED["Scheduler — modular"]
+        SN["naive schedule\n(4 classes)"]
+        SP["LK-priority schedule\n(6 classes)"]
+    end
+
+    SN & SP --> ENTER
+
+    subgraph BS["backwards_search — shared kernel"]
+        ENTER["sequent S"]
+        ENTER -->|ok| K0["get scheduled rules"]
+        K0 -->|"for each rule r ∈ R"| K1["apply r backwards"]
+        K1 --> KRES{"result?"}
+        KRES -->|premises| ENTER
+    end
+
+    ENTER -->|"depth / steps / time exceeded"| BSTOP
+    K0 -->|no rules| KNP
+    K0 -->|quantifier exhausted| BSTOP
+    KRES -->|branch closed| KP
+    KRES -->|all rules fail| KNP
+
+    KP["Provable"]
+    KNP["NotProvable"]
+    BSTOP["Unknown / Timeout"]
+
+    KP & KNP & BSTOP --> RES["ProofResult"]
+
+    classDef pipe fill:#eef6ff,stroke:#2b5d8a,stroke-width:1px;
+    classDef novel fill:#fff7e6,stroke:#9a6b00,stroke-width:1px;
+    classDef good fill:#edf7ed,stroke:#2f7d32,stroke-width:1px;
+    classDef stop fill:#ffecec,stroke:#a33,stroke-width:1px;
+
+    class P1,SEQ,E0,ENTER,K0,K1,KRES pipe;
+    class E1,E2,E4,E5,SN,SP novel;
+    class KP,RES good;
+    class KNP,BSTOP stop;

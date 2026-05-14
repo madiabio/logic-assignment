@@ -1,0 +1,4 @@
+problem_id,engine,elapsed_ms
+MPT0066+1,naive,1
+MPT0066+1,priority,2
+MPT0066+1,priority-id,1

@@ -1,0 +1,60 @@
+---
+title: Scheduler Policies
+---
+flowchart TD
+    A["Current sequent<br/>+ branch state"]
+    B["Find applicable<br/>LK' rule matches"]
+    A --> B
+    B --> C{"engine family"}
+
+    C -->|Naive / ID| N0["schedule_next_rules"]
+    C -->|Priority / Priority-ID| P0["schedule_next_rules_lk_priority"]
+
+    subgraph N["Naive scheduler policy"]
+        N0 --> N1["1. Closing"]
+        N1 --> N2["2. Invertible<br/>+ eigen quantifiers"]
+        N2 --> N3["3. Branching<br/>propositional"]
+        N3 --> N4["4. Reusable<br/>quantifiers"]
+        N4 --> N5["Visible terms,<br/>then fresh fallback"]
+    end
+
+    subgraph P["LK-priority scheduler policy"]
+        P0 --> P1["1. Closing"]
+        P1 --> P2["2. Non-branching<br/>propositional"]
+        P2 --> P3["3. Branching<br/>propositional"]
+        P3 --> P4["4. Eigenvariable<br/>quantifiers"]
+        P4 --> P5["5. Reusable<br/>visible terms"]
+        P5 --> P6["6. Reusable<br/>fresh fallback"]
+    end
+
+    N5 --> R["First non-empty<br/>group becomes Rules"]
+    P6 --> R
+    R --> S{"ScheduledRule"}
+    S -->|ordinary LK rule| T["Standard"]
+    S -->|quantifier + term| U["ForAllL"]
+    S -->|quantifier + term| V["ExistsR"]
+
+    R --> W{"no rules?"}
+    W -->|no matches| X["NoRules"]
+    W -->|reusable spent| Y["QuantifierExhausted"]
+
+    subgraph Q["Quantifier instantiation"]
+        Q1["Occurrence key<br/>identifies formula"]
+        Q2["Skip terms already<br/>used on branch"]
+        Q3["Count fresh<br/>fallback terms"]
+        Q1 --> Q2 --> Q3
+    end
+
+    N4 -. uses .-> Q1
+    P5 -. uses .-> Q1
+    P6 -. uses .-> Q1
+
+    classDef common fill:#f7f7f7,stroke:#333,stroke-width:1px;
+    classDef naive fill:#eef6ff,stroke:#2b5d8a,stroke-width:1px;
+    classDef priority fill:#fff7e6,stroke:#9a6b00,stroke-width:1px;
+    classDef output fill:#edf7ed,stroke:#2f7d32,stroke-width:1px;
+    class A,B,C,Q1,Q2,Q3 common;
+    class N0,N1,N2,N3,N4,N5 naive;
+    class P0,P1,P2,P3,P4,P5,P6 priority;
+    class R,S,T,U,V,W,X,Y output;
+

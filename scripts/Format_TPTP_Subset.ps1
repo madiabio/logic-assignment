@@ -8,9 +8,9 @@ param(
     [string]$CompareFile = $null
 )
 
-$OutputFile = "${Difficulty}_problems.txt"
+$OutputFile = "${Difficulty}_problems_countersatisfiable.txt"
 
-$CommandUsed = "tptp2t -q3 -pp Form FOF Status Theorem Formulae 0 50 Atoms 0 150 -Equality -Arithmetic"
+$CommandUsed = "tptp2t -q3 -pp Form FOF Status CounterSatisfiable Formulae 0 50 Atoms 0 150 -Equality -Arithmetic"
 $Description = "Unbounded rating, between 0 and 50 formulae, 0 and 150 atoms. No equality, no arithmetic."
 $SortDescription = "Sorted by number of atoms ascending."
 

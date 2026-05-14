@@ -47,7 +47,9 @@ pub struct ResultRecord {
 
 /// Open (or create) a SQLite database at the given path.
 pub fn open_db(path: &Path) -> rusqlite::Result<Connection> {
-    Connection::open(path)
+    let conn = Connection::open(path)?;
+    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    Ok(conn)
 }
 
 /// Create the `runs` and `results` tables if they do not already exist,
@@ -358,5 +360,40 @@ mod tests {
 
         let result = insert_result(&conn, run_id, &invalid_result);
         assert!(result.is_err(), "INSERT should fail for invalid status");
+    }
+
+    #[test]
+    fn open_db_enables_wal_journal_mode() {
+        let path = std::env::temp_dir().join("tp_wal_test.db");
+        let conn = open_db(&path).unwrap();
+        let mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(mode, "wal");
+    }
+
+    #[test]
+    fn channel_writer_inserts_all_received_records() {
+        use std::sync::mpsc;
+
+        let conn = in_memory();
+        ensure_schema(&conn).unwrap();
+        let run_id = insert_run(&conn, &sample_run()).unwrap();
+
+        let (tx, rx) = mpsc::channel::<ResultRecord>();
+
+        tx.send(sample_result("provable")).unwrap();
+        tx.send(sample_result("timeout")).unwrap();
+        tx.send(sample_result("provable")).unwrap();
+        drop(tx);
+
+        while let Ok(record) = rx.recv() {
+            insert_result(&conn, run_id, &record).unwrap();
+        }
+
+        let summary = query_run_summary(&conn, run_id).unwrap();
+        assert_eq!(summary.get("provable"), Some(&2u64));
+        assert_eq!(summary.get("timeout"), Some(&1u64));
     }
 }

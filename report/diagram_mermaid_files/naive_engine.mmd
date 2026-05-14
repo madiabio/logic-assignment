@@ -1,0 +1,29 @@
+---
+title: Naive Proof Engine
+---
+flowchart LR
+    IN["Goal sequent Γ ⊢ Δ"] --> RUN
+
+    subgraph ORQ["Naive orchestration — single pass"]
+        RUN["naive::run"] --> BS["backwards_search"]
+        BS --> RES["return result"]
+    end
+
+    BS -. calls .-> SCHED_START
+
+    subgraph SCHED["Naive scheduler — return first non-empty class"]
+        SCHED_START["collect applicable rules"]
+        C1["1. Closing  (id, ⊤R, ⊥L)"]
+        C2["2. Invertible + eigenvariable quantifiers  (∧L, ∨R, →R, ¬L, ¬R, ∀R, ∃L)"]
+        C3["3. Branching  (∧R, ∨L, →L)"]
+        C4["4. Reusable quantifiers  (∀L, ∃R) — visible terms, then fresh"]
+        SCHED_START --> C1 --> C2 --> C3 --> C4
+    end
+
+    classDef engine fill:#eef6ff,stroke:#2b5d8a,stroke-width:1px;
+    classDef sched fill:#fff7e6,stroke:#9a6b00,stroke-width:1px;
+    classDef result fill:#edf7ed,stroke:#2f7d32,stroke-width:1px;
+
+    class RUN,BS engine;
+    class SCHED_START,C1,C2,C3,C4 sched;
+    class RES result;

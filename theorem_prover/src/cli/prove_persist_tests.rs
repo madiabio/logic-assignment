@@ -37,3 +37,12 @@ fn result_record_for_problem_skips_processing_failures() {
     let result = ProveFileResult::ProcessingFailure;
     assert!(result_record_for_problem(&problem_run("sample.p"), &result, 0).is_none());
 }
+
+#[test]
+fn result_record_for_problem_maps_provable_status() {
+    let result = ProveFileResult::Status(theorem_prover::ProofStatus::Provable, None);
+    let record = result_record_for_problem(&problem_run("abc.p"), &result, 42)
+        .expect("provable should produce a record");
+    assert_eq!(record.status, "provable");
+    assert_eq!(record.elapsed_ms, 42);
+}

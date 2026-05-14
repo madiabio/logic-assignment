@@ -1,0 +1,18 @@
+\section{Implementation}\label{sec:impl}
+
+The prover is written in Rust~\cite{rust2024} ($\sim$4{,}500 lines),
+using \texttt{pest}~\cite{pest2024} for FOF parsing,
+\texttt{clap}~\cite{clap2024} for the CLI,
+\texttt{rusqlite}~\cite{rusqlite2024} for result persistence, and
+\texttt{ctrlc}~\cite{ctrlc2024} for cancellation. Per-problem parallel
+evaluation uses \texttt{rayon}~\cite{rayon2024};
+\texttt{log}/\texttt{env\_logger}~\cite{log2024,envlogger2024} provide
+structured logging and \texttt{chrono}~\cite{chrono2024} timestamps
+SQLite rows. The three engines share all code outside the rule scheduler
+(Figure~\ref{fig:sysarch}). All benchmarks ran on Windows~11 Home (Intel
+Core Ultra~7~258V, 32\,GB RAM, Rust~1.85) with a 1{,}000\,ms wall-clock
+timeout, depth 128, and a per-occurrence fresh-fallback budget of one
+term; step limits were 10{,}000 for TPTP and FOLIO, and effectively
+unlimited ($10^{11}$) for synthetic. Problems with more than six
+biconditionals are skipped before parsing. Results were persisted to
+SQLite and analysed with Python~3.12.

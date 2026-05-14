@@ -1,0 +1,291 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex.fmt)
+ restricted \write18 enabled.
+entering extended mode
+(samplepaper.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2025-12-24>
+(llncs.cls
+Document Class: llncs 2024/01/29 v2.24 
+ LaTeX document class for Lecture Notes in Computer Science
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/base\article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/base\size10.clo))
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/tools\multicol.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/oberdiek\aliascnt.sty))
+ (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphicx.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphics.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\graphics.c
+fg)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\pdftex.def
+))) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsmath.sty
+For additional information on amsmath, use the `?' option.
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amstext.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsgen.sty))
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsbsy.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsopn.sty)
+
+Package amsmath Warning: Unable to redefine math accent \vec.
+
+) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amssymb.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amsfonts.sty))
+ (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/booktabs\booktabs.sty)
+
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/algorithms\algorithm.st
+y (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/float\float.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/base\ifthen.sty))
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/algorithmicx\algpseudoc
+ode.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/algorithmicx\algorithmi
+cx.sty
+Document Style algorithmicx 1.2 - a greatly improved `algorithmic' style
+)
+Document Style - pseudocode environments for use with the `algorithmicx' style
+) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/placeins\placeins.sty
+) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.cfg)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.ltx)
+) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.sty
+)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys\kvdefine
+keys.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pdfescape.s
+ty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxcmds.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\pdftexcmds
+.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\infwarerr.s
+ty)))
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolor.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\nameref.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refcount.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestring\gettit
+lestring.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.sty
+)))
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/stringenc\stringenc.s
+ty) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def
+) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.sty
+) (C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitset.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\bigintcalc
+.sty)))
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hpdftex.def
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck\rerunfil
+echeck.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/generic/uniquecounter\uniquec
+ounter.sty)))
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdf
+tex.def) (samplepaper.aux)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mk
+ii
+[Loading MPS to PDF converter (version 2006.09.02).]
+)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-b
+ase.sty
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sys.c
+fg)) (samplepaper.out) (samplepaper.out)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd)
+(C:\Users\madel\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd)
+(sections/abstract.tex) (sections/introduction.tex [1{C:/Users/madel/AppData/Lo
+cal/MiKTeX/fonts/map/pdftex/pdftex.map}]) (sections/proposed-approach.tex
+[2 <./figures/system_architecture_diagram.pdf>] [3]
+Underfull \hbox (badness 10000) in paragraph at lines 137--137
+[]\T1/cmr/bx/n/9 Fig.2. []\T1/cmr/m/n/9 Priority-ID proof en-gine: iterative-de
+epening en-ve-lope around
+) (sections/implementation.tex
+Overfull \hbox (4.84607pt too wide) in paragraph at lines 3--12
+\T1/cmr/m/n/10 cel-la-tion. Per-problem par-al-lel eval-u-a-tion uses \T1/cmtt/
+m/n/10 rayon \T1/cmr/m/n/10 [[]]; \T1/cmtt/m/n/10 log\T1/cmr/m/n/10 /\T1/cmtt/m
+/n/10 env_logger \T1/cmr/m/n/10 [[],[]]
+[4 <./figures/priority_id_engine_diagram.pdf>])
+(sections/experimental_setup.tex (sections/dataset.tex)
+Overfull \hbox (162.79941pt too wide) in paragraph at lines 16--9
+ []\T1/cmr/bx/n/10 Synthetic.[] \T1/cmr/m/n/10 202 syn-thetic FOF prob-lems wer
+e gen-er-ated pro-gram-mat-i-cally (\T1/cmtt/m/n/10 scripts/generate_fof_benchm
+arks.py\T1/cmr/m/n/10 )
+[5]
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+[6 <./figures/tptp_combined_overview.pdf> <./figures/folio_overview.pdf>])
+(sections/discussion-and-conclusion.tex [7 <./figures/ai_generated_overview.pdf
+>])
+No file samplepaper.bbl.
+
+pdfTeX warning (ext4): destination with the same identifier (name{section.1}) h
+as been already used, duplicate ignored
+<to be read again> 
+                   \relax 
+l.43 \section{Algorithms}
+                         \label{app:algorithms} (pseudocode/naive_alg.tex)
+(pseudocode/priority_id_algorithm.tex)
+pdfTeX warning (ext4): destination with the same identifier (name{section.2}) h
+as been already used, duplicate ignored
+<to be read again> 
+                   \relax 
+l.54 \section{Per-dataset outcome tables}
+                                         \label{app:tables}
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+pdfTeX warning (ext4): destination with the same identifier (name{section.3}) h
+as been already used, duplicate ignored
+<to be read again> 
+                   \relax 
+l.123 \section{Auxiliary figures}
+                                 \label{app:figures} [8]
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+[9] [10] [11 <./figures/ai_generated_depth_solve_rate.pdf>] [12 <./figures/tptp
+_provable_overview.pdf> <./figures/tptp_unprovable_overview.pdf> <./figures/ai_
+generated_tier_breakdown.pdf> <./figures/naive_engine_diagram.pdf>]
+(samplepaper.aux)
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+ )
+(see the transcript file for additional information)
+pdfTeX warning (dest): name{cite.pelletier1986} has been referenced but does no
+t exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.barcan1946} has been referenced but does not e
+xist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.russell1902} has been referenced but does not 
+exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.smullyan1978} has been referenced but does not
+ exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.han2024folio} has been referenced but does not
+ exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.chrono2024} has been referenced but does not e
+xist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.envlogger2024} has been referenced but does no
+t exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.log2024} has been referenced but does not exis
+t, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.rayon2024} has been referenced but does not ex
+ist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.ctrlc2024} has been referenced but does not ex
+ist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.rusqlite2024} has been referenced but does not
+ exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.clap2024} has been referenced but does not exi
+st, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.pest2024} has been referenced but does not exi
+st, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.rust2024} has been referenced but does not exi
+st, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.church1936entscheidungsproblem} has been refer
+enced but does not exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.Sut17} has been referenced but does not exist,
+ replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.otten2003leancop} has been referenced but does
+ not exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.schulz2002E} has been referenced but does not 
+exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.kovacs2013vampire} has been referenced but doe
+s not exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.korf1985iterative} has been referenced but doe
+s not exist, replaced by a fixed one
+
+
+pdfTeX warning (dest): name{cite.hou2021fundamentals} has been referenced but d
+oes not exist, replaced by a fixed one
+
+ <C:\Users\madel\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\eccc09
+00.pk> <C:\Users\madel\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\
+ecti0900.pk> <C:\Users\madel\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/d
+pi600\eccc1000.pk> <C:\Users\madel\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappe
+n/ec/dpi600\ectt1000.pk> <C:\Users\madel\AppData\Local\MiKTeX\fonts/pk/ljfour/j
+knappen/ec/dpi600\ecbx1000.pk> <C:\Users\madel\AppData\Local\MiKTeX\fonts/pk/lj
+four/jknappen/ec/dpi600\ecti1000.pk> <C:\Users\madel\AppData\Local\MiKTeX\fonts
+/pk/ljfour/jknappen/ec/dpi600\ectt0900.pk> <C:\Users\madel\AppData\Local\MiKTeX
+\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1200.pk> <C:\Users\madel\AppData\Local\
+MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm0900.pk> <C:\Users\madel\AppData\
+Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx0900.pk> <C:\Users\madel\Ap
+pData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm0900.pk> <C:\Users\ma
+del\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1000.pk> <C:\Us
+ers\madel\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1440.pk><
+C:/Users/madel/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cmextr
+a/cmbsy7.pfb><C:/Users/madel/AppData/Local/Programs/MiKTeX/fonts/type1/public/a
+msfonts/cm/cmmi10.pfb><C:/Users/madel/AppData/Local/Programs/MiKTeX/fonts/type1
+/public/amsfonts/cm/cmmi9.pfb><C:/Users/madel/AppData/Local/Programs/MiKTeX/fon
+ts/type1/public/amsfonts/cm/cmr10.pfb><C:/Users/madel/AppData/Local/Programs/Mi
+KTeX/fonts/type1/public/amsfonts/cm/cmr6.pfb><C:/Users/madel/AppData/Local/Prog
+rams/MiKTeX/fonts/type1/public/amsfonts/cm/cmr7.pfb><C:/Users/madel/AppData/Loc
+al/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr9.pfb><C:/Users/madel/AppD
+ata/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/m
+adel/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy6.pfb><C:
+/Users/madel/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy7
+.pfb><C:/Users/madel/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/
+cm/cmsy9.pfb><C:/Users/madel/AppData/Local/Programs/MiKTeX/fonts/type1/public/a
+msfonts/cm/cmti10.pfb><C:/Users/madel/AppData/Local/Programs/MiKTeX/fonts/type1
+/public/amsfonts/cm/cmti9.pfb>
+Output written on samplepaper.pdf (12 pages, 698314 bytes).
+Transcript written on samplepaper.log.

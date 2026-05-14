@@ -1,0 +1,32 @@
+\section{Introduction}
+
+Automated theorem proving (ATP) for first-order logic is the problem of
+mechanically determining whether a formula follows from given axioms.
+Industrial-strength provers such as Vampire~\cite{kovacs2013vampire} and
+E~\cite{schulz2002E} use saturation-based resolution and superposition
+calculi; the connection-based leanCoP~\cite{otten2003leancop} avoids
+explicit instantiation through matrix methods and unification. These
+systems solve thousands of problems from the TPTP
+library~\cite{Sut17} and are applied in hardware verification, software
+model-checking, and proof-assistant automation. The pedagogical LK$'$
+calculus of Hou~\cite[Fig.~2.3, p.~65]{hou2021fundamentals} occupies a
+different position: it is a backward sequent search whose rules
+can be stated in twenty lines of pseudocode, making it suitable for formal
+study, but whose na\"ive rule-application order can lead to pathological
+search behaviour. LK$'$ eliminates the structural rules of
+LK~\cite{gentzen1935untersuchungen} and makes $\forall L$ and $\exists R$
+\emph{reusable}: the quantified formula is retained after
+instantiation so the same axiom can be applied with multiple witnesses on a
+single branch, and the non-deterministic choice of witness is the principal
+source of search-space explosion.
+
+This paper identifies two structural failure modes in the na\"ive LK$'$
+backward search of Hou~\cite[Algorithm~2, p.~67]{hou2021fundamentals} and
+proposes two targeted improvements: a six-class \emph{priority schedule}
+that refines rule-application order (Sect.~\ref{sec:approach}) and an
+\emph{iterative-deepening} envelope around the depth-first
+search~\cite{korf1985iterative}. An empirical evaluation on three datasets
+(888~TPTP problems, 280~FOLIO problems, 202~synthetic) shows consistent
+improvement in decided problems across all problem families, with gains
+concentrated where short proofs exist but are blocked by deep
+quantifier-instantiation chains (Sect.~\ref{sec:experiments}).

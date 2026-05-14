@@ -1,0 +1,36 @@
+\section{Discussion and Conclusion}
+
+The three-engine design attributes gains directly: \texttt{id} adds only
+iterative deepening, \texttt{priority-id} adds only the six-class
+schedule on top of \texttt{id}, and all other code is shared. Iterative
+deepening contributes 60 of the 82 additional decisions over the baseline
+(73\,\%); the priority schedule contributes the remaining 22 (27\,\%).
+
+FOLIO is an attribution outlier: \texttt{id} ties \texttt{naive} at 57
+because every conversion to \textit{Provable} is offset by another
+decision regressing, so all 9 additional FOLIO decisions come from the
+priority schedule rather than from iterative deepening.
+
+Roughly 70\,\% of problems remain undecided overall, dominated by
+timeouts rather than \textit{Unknown}: the bottleneck is search-space
+width, not raw time, and sharper rule-selection would help more than a
+larger resource budget.
+
+\subsection{Conclusion}
+
+Small, principled changes to rule-application order produce disproportionate
+improvements in practical solve rate: iterative deepening and the six-class
+LK$'$ priority schedule together raise decided problems from 239 to 321
+across three diverse datasets without altering the proof calculus.
+Key limitations: solve times below 50\,ms are unreliable (OS jitter);
+no TPTP problem rated above 0.10 is solved, confining the prover to the
+easiest tier; direct Rust recursion bounds \texttt{max\_depth} at the
+stack limit; and the prover is not competitive with mature systems such
+as leanCoP~\cite{otten2003leancop} or Vampire~\cite{kovacs2013vampire}.
+Natural successors are lemma sharing (caching closed subgoals) and a
+transition to connection-based or saturation-based proof
+strategies~\cite{kovacs2013vampire,schulz2002E}.
+
+\subsubsection{Data Availability.}
+Source code, benchmark scripts, and the SQLite database backing every
+figure in this paper are available at the project repository on GitHub.
