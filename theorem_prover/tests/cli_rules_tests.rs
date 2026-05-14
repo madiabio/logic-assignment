@@ -1170,15 +1170,26 @@ fof(conj_1,conjecture,p).
         .expect("binary should run");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "stdout was:\n{stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "exit: {:?}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        output.status.code(),
+    );
     assert!(
         stdout.contains(
             "kind\tindex\ttotal\tproblem_id\tpath\tformulae\tatoms\tstatus\telapsed_ms\tdetail"
         ),
-        "stdout was:\n{stdout}"
+        "stdout was:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stdout.contains("\tUnknown\t"), "stdout was:\n{stdout}");
-    assert!(stdout.contains("\tmax_steps"), "stdout was:\n{stdout}");
+    assert!(
+        stdout.contains("\tUnknown\t"),
+        "stdout was:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("\tmax_steps"),
+        "stdout was:\n{stdout}\nstderr:\n{stderr}"
+    );
 }
 
 #[test]
